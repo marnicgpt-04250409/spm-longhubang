@@ -1,1 +1,2 @@
 .partner{display:flex;align-items:center;gap:7px;padding-left:20px;border-left:1px solid #e7e9f1}.partner span{color:#9298aa;font-size:10px;font-weight:700}.partner img{width:46px;height:46px;object-fit:contain}@media(max-width:800px){.partner{margin-left:auto;padding-left:10px}.partner span{display:none}.partner img{width:39px;height:39px}}
+.teacher-mobile{display:none}@media(max-width:800px){.teacher-mobile{display:block;border:0;border-radius:8px;background:#efedff;color:#5b4fdd;padding:8px 10px;font-size:11px;font-weight:800}.user{display:none}}

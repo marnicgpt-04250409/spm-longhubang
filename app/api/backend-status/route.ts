@@ -3,8 +3,10 @@ import { createClient } from "@supabase/supabase-js";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  // Keep this app isolated from the legacy marketplace integration variables.
+  // These values are server-only Vercel environment variables.
+  const url = process.env.SPM_SUPABASE_URL;
+  const key = process.env.SPM_SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     return Response.json({ connected: false }, { status: 503 });
   }

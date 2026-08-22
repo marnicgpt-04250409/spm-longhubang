@@ -1,15 +1,17 @@
 import { apiError, getAdminClient, malaysiaDate, requireUser } from "@/lib/supabase-server";
 
 const allowed = new Set(["Bahasa Melayu", "Matematik", "Sejarah", "Biologi", "English"]);
-const options = (q: Record<string, string>) => [q.option_a, q.option_b, q.option_c, q.option_d];
+const options = (q: Record<string, string | null>) => [q.option_a, q.option_b, q.option_c, q.option_d];
+const firstRelation = <T,>(value: T | T[] | null | undefined): T | null => Array.isArray(value) ? value[0] ?? null : value ?? null;
 
 export async function GET(request: Request) {
   try {
     const user = await requireUser(request);
     const supabase = getAdminClient();
-    const { data: quiz } = await supabase.from("daily_quizzes").select("id, subject, status, correct_count, completed_at, quiz_items(id, ordinal, selected_option, questions(id, subject, prompt, option_a, option_b, option_c, option_d, correct_option, explanation))").eq("user_id", user.id).eq("local_date", malaysiaDate()).maybeSingle();
+    const { data: rawQuiz } = await supabase.from("daily_quizzes").select("id, subject, status, correct_count, completed_at, quiz_items(id, ordinal, selected_option, questions(id, subject, prompt, option_a, option_b, option_c, option_d, correct_option, explanation))").eq("user_id", user.id).eq("local_date", malaysiaDate()).maybeSingle();
+    const quiz = rawQuiz as any;
     if (!quiz) return Response.json({ quiz: null });
-    return Response.json({ quiz: { ...quiz, items: quiz.quiz_items.sort((a, b) => a.ordinal - b.ordinal).map((item) => ({ id: item.id, ordinal: item.ordinal, selectedOption: item.selected_option, question: item.questions && { id: item.questions.id, subject: item.questions.subject, prompt: item.questions.prompt, options: options(item.questions), correctOption: quiz.status === "submitted" ? item.questions.correct_option : undefined, explanation: quiz.status === "submitted" ? item.questions.explanation : undefined } })) } });
+    return Response.json({ quiz: { ...quiz, items: quiz.quiz_items.sort((a: any, b: any) => a.ordinal - b.ordinal).map((item: any) => { const question = firstRelation<Record<string, string | null>>(item.questions); return { id: item.id, ordinal: item.ordinal, selectedOption: item.selected_option, question: question && { id: question.id, subject: question.subject, prompt: question.prompt, options: options(question), correctOption: quiz.status === "submitted" ? question.correct_option : undefined, explanation: quiz.status === "submitted" ? question.explanation : undefined } }; }) } });
   } catch (error) { return apiError(error); }
 }
 
@@ -43,11 +45,12 @@ export async function PATCH(request: Request) {
     const { data: quiz } = await supabase.from("daily_quizzes").select("id, status").eq("id", quizId).eq("user_id", user.id).eq("local_date", malaysiaDate()).maybeSingle();
     if (!quiz) return Response.json({ error: "找不到今天的任务。" }, { status: 404 });
     if (quiz.status === "submitted") return Response.json({ error: "今天的正式任务已经提交。" }, { status: 409 });
-    const { data: items, error } = await supabase.from("quiz_items").select("id, questions(correct_option)").eq("quiz_id", quizId);
+    const { data: rawItems, error } = await supabase.from("quiz_items").select("id, questions(correct_option)").eq("quiz_id", quizId);
+    const items = rawItems as any[] | null;
     if (error || !items || items.length !== 20) throw error || new Error("Quiz items missing");
     const choice = new Map(answers.map((a) => [a.itemId, a.option]));
     if (choice.size !== 20 || items.some((item) => !choice.has(item.id))) return Response.json({ error: "答案与题目不一致。" }, { status: 400 });
-    const correct = items.reduce((score, item) => score + (choice.get(item.id) === item.questions.correct_option ? 1 : 0), 0);
+    const correct = items.reduce((score: number, item: any) => score + (choice.get(item.id) === firstRelation<any>(item.questions)?.correct_option ? 1 : 0), 0);
     await Promise.all(items.map((item) => supabase.from("quiz_items").update({ selected_option: choice.get(item.id) }).eq("id", item.id)));
     const now = new Date().toISOString();
     const { error: updateError } = await supabase.from("daily_quizzes").update({ status: "submitted", correct_count: correct, completed_at: now }).eq("id", quizId).eq("status", "active");

@@ -26,9 +26,17 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   try {
     const user = await requireTeacher(request);
-    const { id, publish } = await request.json();
-    if (typeof id !== "string" || publish !== true) return Response.json({ error: "无效发布请求。" }, { status: 400 });
-    const { data, error } = await getAdminClient().from("questions").update({ status: "published", published_at: new Date().toISOString() }).eq("id", id).eq("author_id", user.id).eq("answer_confirmed", true).select("id,status").single();
+    const { id, publish, correctOption } = await request.json();
+    if (typeof id !== "string") return Response.json({ error: "无效题目请求。" }, { status: 400 });
+    const supabase = getAdminClient();
+    if (correctOption !== undefined) {
+      if (!validOption(correctOption)) return Response.json({ error: "正确答案必须是 A、B、C 或 D。" }, { status: 400 });
+      const { data, error } = await supabase.from("questions").update({ correct_option: correctOption, answer_confirmed: true }).eq("id", id).eq("author_id", user.id).select("id,status,answer_confirmed").single();
+      if (error) throw error;
+      return Response.json({ question: data });
+    }
+    if (publish !== true) return Response.json({ error: "无效发布请求。" }, { status: 400 });
+    const { data, error } = await supabase.from("questions").update({ status: "published", published_at: new Date().toISOString() }).eq("id", id).eq("author_id", user.id).eq("answer_confirmed", true).select("id,status").single();
     if (error) throw error;
     return Response.json({ question: data });
   } catch (error) { return apiError(error); }

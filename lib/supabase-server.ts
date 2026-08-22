@@ -8,13 +8,15 @@ export function getAdminClient() {
   return createClient(url, serviceRole, { auth: { persistSession: false } });
 }
 
-export function malaysiaDate() {
-  return new Intl.DateTimeFormat("en-CA", {
+export function malaysiaDate(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Kuala_Lumpur",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(new Date());
+  }).formatToParts(date);
+  const value = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
 export async function requireUser(request: Request): Promise<User> {

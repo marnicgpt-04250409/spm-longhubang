@@ -54,8 +54,7 @@ export async function PATCH(request: Request) {
     if (updateError) throw updateError;
     const today = malaysiaDate();
     const { data: profile } = await supabase.from("profiles").select("streak_days,last_checkin_date").eq("id", user.id).single();
-    const yesterday = new Date(`${today}T00:00:00+08:00`); yesterday.setUTCDate(yesterday.getUTCDate() - 1);
-    const yesterdayDate = yesterday.toISOString().slice(0, 10);
+    const yesterdayDate = malaysiaDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
     const streak = profile?.last_checkin_date === today ? profile.streak_days : profile?.last_checkin_date === yesterdayDate ? profile.streak_days + 1 : 1;
     await supabase.from("profiles").update({ streak_days: streak, last_checkin_date: today }).eq("id", user.id);
     return Response.json({ correct, streak });

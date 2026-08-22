@@ -2,6 +2,15 @@ import { apiError, getAdminClient, requireTeacher } from "@/lib/supabase-server"
 
 const validOption = (value: unknown): value is "A" | "B" | "C" | "D" => typeof value === "string" && /^[ABCD]$/.test(value);
 
+export async function GET(request: Request) {
+  try {
+    const user = await requireTeacher(request);
+    const { data, error } = await getAdminClient().from("questions").select("id,subject,prompt,status,answer_confirmed,created_at,uploads(filename)").eq("author_id", user.id).order("created_at", { ascending: false }).limit(100);
+    if (error) throw error;
+    return Response.json({ questions: data });
+  } catch (error) { return apiError(error); }
+}
+
 export async function POST(request: Request) {
   try {
     const user = await requireTeacher(request);

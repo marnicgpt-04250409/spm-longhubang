@@ -11,79 +11,6 @@ type Question = {
   note: string;
   itemId?: string;
 };
-const bank: Question[] = [
-  {
-    subject: "Bahasa Melayu",
-    text: "Pilih ayat yang menggunakan kata kerja transitif dengan betul.",
-    options: [
-      "Adik tidur di sofa.",
-      "Ibu membaca novel itu.",
-      "Burung itu terbang tinggi.",
-      "Mereka berjalan perlahan.",
-    ],
-    answer: 1,
-    note: "‘Membaca’ diikuti objek ‘novel itu’.",
-  },
-  {
-    subject: "Matematik",
-    text: "Nilai bagi 3(2x − 5) apabila x = 4 ialah",
-    options: ["9", "12", "15", "24"],
-    answer: 0,
-    note: "3(2 × 4 − 5) = 9.",
-  },
-  {
-    subject: "Sejarah",
-    text: "Apakah tujuan utama penubuhan Malayan Union pada tahun 1946?",
-    options: [
-      "Meluaskan kuasa raja Melayu",
-      "Menyatukan pentadbiran negeri Melayu",
-      "Menghapuskan kewarganegaraan",
-      "Menubuhkan kerajaan persekutuan",
-    ],
-    answer: 1,
-    note: "Pentadbirannya disatukan di bawah kerajaan pusat.",
-  },
-  {
-    subject: "Biologi",
-    text: "Struktur sel manakah mengawal semua aktiviti sel?",
-    options: ["Membran sel", "Mitokondrion", "Nukleus", "Vakuol"],
-    answer: 2,
-    note: "Nukleus mengawal aktiviti sel.",
-  },
-  {
-    subject: "English",
-    text: "Choose the sentence with the correct subject-verb agreement.",
-    options: [
-      "The students is ready.",
-      "Each books are useful.",
-      "Neither answer is correct.",
-      "My friends goes home.",
-    ],
-    answer: 2,
-    note: "‘Neither’ takes the singular verb ‘is’.",
-  },
-];
-const leaders = [
-  ["1", "Nur Aina", "20", "08:42"],
-  ["2", "陈宇轩", "19", "09:14"],
-  ["3", "Siti Farah", "19", "10:02"],
-  ["4", "Arjun K.", "18", "08:57"],
-  ["5", "林嘉恩", "18", "11:20"],
-];
-const streakLeaders = [
-  ["1", "陈宇轩", "42", "今天"],
-  ["2", "Nur Aina", "31", "今天"],
-  ["3", "林嘉恩", "21", "今天"],
-  ["4", "Siti Farah", "18", "昨天"],
-  ["5", "Arjun K.", "14", "今天"],
-];
-const fallbackSubjects = [
-  "Bahasa Melayu",
-  "Matematik",
-  "Sejarah",
-  "Biologi",
-  "English",
-];
 const Logo = () => (
   <div className="logo">
     <span>SPM</span>
@@ -110,10 +37,11 @@ export default function Home() {
   const [rankRows, setRankRows] = useState<string[][]>([]);
   const [teacherUploads, setTeacherUploads] = useState<any[]>([]);
   const [teacherQuestions, setTeacherQuestions] = useState<any[]>([]);
-  const [subjectList, setSubjectList] = useState(fallbackSubjects);
+  const [subjectList, setSubjectList] = useState<string[]>([]);
   const [quizMode, setQuizMode] = useState<"daily" | "practice">("daily");
   const [history, setHistory] = useState<any[]>([]);
-  const q = quiz[n] ?? bank[0]!;
+  const [profile, setProfile] = useState<any>(null);
+  const q = quiz[n];
   const localScore = useMemo(
     () =>
       answers.reduce<number>(
@@ -123,11 +51,7 @@ export default function Home() {
     [answers, quiz],
   );
   const score = serverScore ?? localScore;
-  const shownRows = rankRows.length
-    ? rankRows
-    : rankMode === "daily"
-      ? leaders
-      : streakLeaders;
+  const shownRows = rankRows;
   useEffect(() => {
     const client = getBrowserClient();
     if (!client) return;
@@ -166,6 +90,7 @@ export default function Home() {
     try {
       const data = await callApi("/api/me");
       setTeacher(data.profile?.role === "teacher");
+      setProfile(data.profile ?? null);
     } catch {
       /* Account data is optional until login is configured. */
     }
@@ -458,11 +383,8 @@ export default function Home() {
         if (mode === "daily") await loadDaily();
         else await loadPractice(data.id);
       } else {
-        const pool = bank.filter((item) => item.subject === subject);
-        setQuiz(Array.from({ length: 20 }, (_, i) => pool[i % pool.length]));
-        setAnswers([]);
-        setDone(false);
-        setServerScore(null);
+        await login();
+        return;
       }
       setTab("quiz");
     } catch (error) {
@@ -563,14 +485,21 @@ export default function Home() {
               <p>本月学习足迹</p>
               <div className="week">
                 {"MTWTFSS".split("").map((x, i) => (
-                  <span className={i < 5 ? "checked" : ""} key={i}>
+                  <span
+                    className={
+                      i >= 7 - Math.min(profile?.streak_days ?? 0, 7)
+                        ? "checked"
+                        : ""
+                    }
+                    key={i}
+                  >
                     <b>{x}</b>
                     <i>{i < 5 ? "✓" : ""}</i>
                   </span>
                 ))}
               </div>
               <div className="streak">
-                <strong>7</strong>
+                <strong>{profile?.streak_days ?? 0}</strong>
                 <span>
                   天连续打卡
                   <br />
@@ -587,6 +516,12 @@ export default function Home() {
                 <p>每日首轮选定后不可更换，完成该科 20 题将计入日榜。</p>
               </div>
               <div className="subject-grid">
+                {subjectList.length === 0 && (
+                  <p>
+                    还没有可用科目。教师发布至少 20
+                    道题目后，科目会自动显示在这里。
+                  </p>
+                )}
                 {subjectList.map((subject) => (
                   <button
                     className={subject === selectedSubject ? "chosen" : ""}
@@ -605,7 +540,11 @@ export default function Home() {
                 >
                   稍后再说
                 </button>
-                <button className="primary" onClick={() => begin()}>
+                <button
+                  className="primary"
+                  disabled={subjectList.length === 0}
+                  onClick={() => begin()}
+                >
                   开始 {selectedSubject}　→
                 </button>
               </footer>
@@ -649,6 +588,9 @@ export default function Home() {
                 </button>
               </div>
               <div className="mini">
+                {shownRows.length === 0 && (
+                  <p>今天还没有成绩，完成首轮任务即可上榜。</p>
+                )}
                 {shownRows.slice(0, 3).map(([r, name, points]) => (
                   <div key={r}>
                     <strong>{r}</strong>
@@ -699,32 +641,39 @@ export default function Home() {
                 </div>
                 <span>◷ 19:46</span>
               </div>
-              <article className="question">
-                <b className="subject">{q.subject}</b>
-                <h1>{q.text}</h1>
-                <div className="options">
-                  {q.options.map((v, i) => (
+              {!q ? (
+                <article className="question">
+                  <h1>正在读取题目…</h1>
+                  <p>若一直没有题目，请返回首页重新开始。</p>
+                </article>
+              ) : (
+                <article className="question">
+                  <b className="subject">{q.subject}</b>
+                  <h1>{q.text}</h1>
+                  <div className="options">
+                    {q.options.map((v, i) => (
+                      <button
+                        key={v}
+                        className={answers[n] === i ? "selected" : ""}
+                        onClick={() => pick(i)}
+                      >
+                        <b>{"ABCD".charAt(i)}</b>
+                        <span>{v}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <footer>
+                    <small>选择一个答案后继续</small>
                     <button
-                      key={v}
-                      className={answers[n] === i ? "selected" : ""}
-                      onClick={() => pick(i)}
+                      disabled={answers[n] === undefined}
+                      className="primary"
+                      onClick={advance}
                     >
-                      <b>{"ABCD".charAt(i)}</b>
-                      <span>{v}</span>
+                      {n === quiz.length - 1 ? "提交答案" : "下一题　→"}
                     </button>
-                  ))}
-                </div>
-                <footer>
-                  <small>选择一个答案后继续</small>
-                  <button
-                    disabled={answers[n] === undefined}
-                    className="primary"
-                    onClick={advance}
-                  >
-                    {n === quiz.length - 1 ? "提交答案" : "下一题　→"}
-                  </button>
-                </footer>
-              </article>
+                  </footer>
+                </article>
+              )}
             </>
           ) : (
             <article className="result">
@@ -847,6 +796,16 @@ export default function Home() {
               <span>{rankMode === "daily" ? "正确题数" : "连续打卡"}</span>
               <span>{rankMode === "daily" ? "完成时间" : "最近打卡"}</span>
             </div>
+            {shownRows.length === 0 && (
+              <div className="tr">
+                <strong>—</strong>
+                <span>
+                  <b>暂时无人上榜</b>
+                </span>
+                <span>—</span>
+                <small>完成首轮 20 题后会显示在这里</small>
+              </div>
+            )}
             {shownRows.map(([r, name, points, time]) => (
               <div className="tr" key={`${r}-${name}`}>
                 <strong>{r}</strong>

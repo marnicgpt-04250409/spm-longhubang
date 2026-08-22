@@ -18,6 +18,25 @@ const Logo = () => (
   </div>
 );
 
+function malaysiaDateLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kuala_Lumpur",
+    weekday: "long",
+    day: "2-digit",
+    month: "long",
+  })
+    .format(date)
+    .toUpperCase();
+}
+
+function malaysiaTimeLabel(date: Date) {
+  return new Intl.DateTimeFormat("en-MY", {
+    timeZone: "Asia/Kuala_Lumpur",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 export default function Home() {
   const [tab, setTab] = useState<
     "home" | "quiz" | "rank" | "history" | "teacher"
@@ -27,7 +46,7 @@ export default function Home() {
   const [done, setDone] = useState(false);
   const [isTeacher, setTeacher] = useState(false);
   const [choosing, setChoosing] = useState(false);
-  const [selectedSubject, setSelectedSubject] = useState("Matematik");
+  const [selectedSubject, setSelectedSubject] = useState("");
   const [quiz, setQuiz] = useState<Question[]>([]);
   const [rankMode, setRankMode] = useState<"daily" | "streak">("daily");
   const [session, setSession] = useState<any>(null);
@@ -41,6 +60,7 @@ export default function Home() {
   const [quizMode, setQuizMode] = useState<"daily" | "practice">("daily");
   const [history, setHistory] = useState<any[]>([]);
   const [profile, setProfile] = useState<any>(null);
+  const [now, setNow] = useState<Date | null>(null);
   const q = quiz[n];
   const localScore = useMemo(
     () =>
@@ -60,6 +80,12 @@ export default function Home() {
       setSession(next),
     );
     return () => data.subscription.unsubscribe();
+  }, []);
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    tick();
+    const timer = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(timer);
   }, []);
   async function login() {
     const client = getBrowserClient();
@@ -105,6 +131,9 @@ export default function Home() {
         setSelectedSubject((current) =>
           data.subjects.includes(current) ? current : data.subjects[0],
         );
+      } else {
+        setSubjectList([]);
+        setSelectedSubject("");
       }
     } catch {
       /* A clean setup has no published subjects yet. */
@@ -155,7 +184,7 @@ export default function Home() {
   async function loadRanking() {
     try {
       const data = await fetch(
-        `/api/leaderboard?kind=${rankMode}${rankMode === "daily" ? `&subject=${encodeURIComponent(selectedSubject)}` : ""}`,
+        `/api/leaderboard?kind=${rankMode}${rankMode === "daily" && selectedSubject ? `&subject=${encodeURIComponent(selectedSubject)}` : ""}`,
       ).then((response) => (response.ok ? response.json() : Promise.reject()));
       setRankRows(
         data.entries.map((item: any, index: number) => [
@@ -369,6 +398,10 @@ export default function Home() {
     mode: "daily" | "practice" = "daily",
   ) {
     try {
+      if (!subject) {
+        setMessage("目前没有可用科目，请等待教师发布至少 20 道题目。");
+        return;
+      }
       setMessage("");
       setQuizMode(mode);
       setSelectedSubject(subject);
@@ -467,7 +500,9 @@ export default function Home() {
         <section className="wrap home">
           <div className="hero">
             <div>
-              <p className="eyebrow">MONDAY · 17 AUGUST</p>
+              <p className="eyebrow">
+                {now ? malaysiaDateLabel(now) : "MALAYSIA TIME"}
+              </p>
               <h1>
                 今天，也比昨天
                 <br />
@@ -494,7 +529,11 @@ export default function Home() {
                     key={i}
                   >
                     <b>{x}</b>
-                    <i>{i < 5 ? "✓" : ""}</i>
+                    <i>
+                      {i >= 7 - Math.min(profile?.streak_days ?? 0, 7)
+                        ? "✓"
+                        : ""}
+                    </i>
                   </span>
                 ))}
               </div>
@@ -545,7 +584,9 @@ export default function Home() {
                   disabled={subjectList.length === 0}
                   onClick={() => begin()}
                 >
-                  开始 {selectedSubject}　→
+                  {selectedSubject
+                    ? `开始 ${selectedSubject}　→`
+                    : "等待题库发布"}
                 </button>
               </footer>
             </section>
@@ -557,7 +598,7 @@ export default function Home() {
                   <p className="eyebrow">DAILY MISSION</p>
                   <h2>今日任务</h2>
                 </div>
-                <b className="pill">{selectedSubject}</b>
+                <b className="pill">{selectedSubject || "未选择科目"}</b>
               </div>
               <div className="mission">
                 <div className="circle">
@@ -565,7 +606,11 @@ export default function Home() {
                   <small>完成度</small>
                 </div>
                 <div>
-                  <h3>{selectedSubject} · 20 题</h3>
+                  <h3>
+                    {selectedSubject
+                      ? `${selectedSubject} · 20 题`
+                      : "等待教师发布题目"}
+                  </h3>
                   <p>自主选择科目 · 完成后计入全校日榜</p>
                   <div className="bar">
                     <i />
@@ -573,7 +618,11 @@ export default function Home() {
                   <small>0 / 20 题</small>
                 </div>
               </div>
-              <button className="link" onClick={() => setChoosing(true)}>
+              <button
+                className="link"
+                onClick={() => setChoosing(true)}
+                disabled={subjectList.length === 0}
+              >
                 更换科目 / 开始答题　→
               </button>
             </article>
@@ -639,7 +688,7 @@ export default function Home() {
                     />
                   </div>
                 </div>
-                <span>◷ 19:46</span>
+                <span>◷ {now ? malaysiaTimeLabel(now) : "马来西亚时间"}</span>
               </div>
               {!q ? (
                 <article className="question">

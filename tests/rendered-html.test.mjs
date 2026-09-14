@@ -96,3 +96,15 @@ test("keeps student school names on the controlled school list", async () => {
   assert.match(profileApi, /!isSchoolOption\(schoolName\)/);
   assert.match(profileApi, /请从学校名单中选择一项/);
 });
+
+test("highlights the active blank in English rational cloze questions", async () => {
+  const [page, styles] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/subjects.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /function QuestionPrompt/);
+  assert.match(page, /本题作答/);
+  assert.match(page, /<mark>\{target\}<\/mark>/);
+  assert.match(styles, /\.cloze-passage mark/);
+});

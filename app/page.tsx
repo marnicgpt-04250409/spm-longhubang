@@ -23,6 +23,33 @@ const Logo = () => (
   </div>
 );
 
+function QuestionPrompt({ text }: { text: string }) {
+  const cloze = text.match(
+    /^([^\n]+)\n\nRead the passage below\. Choose the best word for blank (\d+)\.\n\n([\s\S]+)$/i,
+  );
+  if (!cloze) return <h1>{text}</h1>;
+
+  const [, title, blankNumber, passage] = cloze;
+  const target = `___(${blankNumber})`;
+  const passageParts = passage.split(target);
+
+  return (
+    <div className="cloze-prompt">
+      <p className="cloze-title">{title}</p>
+      <h1><span>本题作答</span><strong>BLANK {blankNumber}</strong></h1>
+      <p className="cloze-instruction">Read the passage and choose the best answer for the highlighted blank.</p>
+      <p className="cloze-passage">
+        {passageParts.map((part, index) => (
+          <span key={`${blankNumber}-${index}`}>
+            {index > 0 && <mark>{target}</mark>}
+            {part}
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
 function malaysiaDateLabel(date: Date) {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Kuala_Lumpur",
@@ -1067,7 +1094,7 @@ export default function Home() {
                 <article className="question">
                   <b className="subject">{q.subject}</b>
                   {q.topic && <p className="question-topic">课本章节 · {q.topic}</p>}
-                  <h1>{q.text}</h1>
+                  <QuestionPrompt text={q.text} />
                   {q.imageUrl && (
                     <Image
                       className="question-visual"

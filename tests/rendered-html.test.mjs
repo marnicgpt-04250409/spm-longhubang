@@ -81,3 +81,18 @@ test("keeps production-scale pagination, mobile access, streak, and security saf
   assert.match(config, /X-Content-Type-Options/);
   assert.match(page, /review-pagination/);
 });
+
+test("keeps student school names on the controlled school list", async () => {
+  const [schools, profileApi, page] = await Promise.all([
+    readFile(new URL("../lib/schools.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/me/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  for (const school of ["SMK PB", "SMK PA", "SMK PBP1", "SMK SEKSYEN 4", "SMJK KATHOLIK", "坤成独中", "其他"]) {
+    assert.match(schools, new RegExp(school));
+  }
+  assert.match(page, /<select value=\{schoolDraft\}/);
+  assert.match(profileApi, /!isSchoolOption\(schoolName\)/);
+  assert.match(profileApi, /请从学校名单中选择一项/);
+});

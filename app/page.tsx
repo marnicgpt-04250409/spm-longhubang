@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
+import { SCHOOL_OPTIONS, schoolSelectValue } from "@/lib/schools";
 import { getBrowserClient } from "@/lib/supabase-browser";
 
 type Question = {
@@ -158,7 +159,7 @@ export default function Home() {
       setTeacher(data.profile?.role === "teacher");
       setProfile(data.profile ?? null);
       setNicknameDraft(data.profile?.nickname || "");
-      setSchoolDraft(data.profile?.school_name || "");
+      setSchoolDraft(schoolSelectValue(data.profile?.school_name));
     } catch {
       /* Account data is optional until login is configured. */
     }
@@ -807,7 +808,7 @@ export default function Home() {
             session
               ? () => {
                   setNicknameDraft(profile?.nickname || "");
-                  setSchoolDraft(profile?.school_name || "");
+                  setSchoolDraft(schoolSelectValue(profile?.school_name));
                   setNicknameDialogOpen(true);
                 }
               : login
@@ -832,8 +833,16 @@ export default function Home() {
             <h1 id="nickname-title">{profile.nickname ? "更新你的学习资料" : "填写真实姓名和学校"}</h1>
             <p>{profile.role === "teacher" ? "请填写学校使用的真实姓名；不会公开你的 Gmail 名称。" : "真实姓名会显示在个人榜；学校只用于学校榜统计，不会公开 Gmail 名称。"}</p>
             <input value={nicknameDraft} onChange={(event) => setNicknameDraft(event.target.value)} maxLength={20} minLength={2} placeholder="例如：陈小明" required />
-            {profile.role === "student" && <input value={schoolDraft} onChange={(event) => setSchoolDraft(event.target.value)} maxLength={120} minLength={2} placeholder="学校名称，例如：SMK Puchong Jaya" required />}
-            <small>请填写真实姓名与正式学校名称；相同学校请使用相同写法。</small>
+            {profile.role === "student" && (
+              <label className="school-field">
+                <span>学校</span>
+                <select value={schoolDraft} onChange={(event) => setSchoolDraft(event.target.value)} required>
+                  <option value="" disabled>请选择学校</option>
+                  {SCHOOL_OPTIONS.map((school) => <option key={school} value={school}>{school}</option>)}
+                </select>
+              </label>
+            )}
+            <small>{profile.role === "student" ? "请填写真实姓名并从名单中选择学校；名单以外请选择“其他”。" : "请填写学校使用的真实姓名。"}</small>
             <button className="primary" type="submit">保存姓名，开始练习　→</button>
             {profile.nickname && <button className="link nickname-close" type="button" onClick={() => setNicknameDialogOpen(false)}>取消</button>}
           </form>

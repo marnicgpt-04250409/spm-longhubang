@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     const { data: rawQuiz, error } = await supabase
       .from("practice_quizzes")
       .select(
-        "id, subject, status, correct_count, completed_at, practice_items(id, ordinal, selected_option, questions(id, subject, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, image_path, image_alt))",
+        "id, subject, status, correct_count, completed_at, practice_items(id, ordinal, selected_option, questions(id, subject, topic, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, image_path, image_alt))",
       )
       .eq("id", quizId)
       .eq("user_id", user.id)
@@ -55,6 +55,7 @@ export async function GET(request: Request) {
               question: question && {
                 id: question.id,
                 subject: question.subject,
+                topic: question.topic || undefined,
                 prompt: question.prompt,
                 options: options(question),
                 imageUrl: question.image_path

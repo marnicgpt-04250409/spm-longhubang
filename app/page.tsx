@@ -6,6 +6,7 @@ import { getBrowserClient } from "@/lib/supabase-browser";
 
 type Question = {
   subject: string;
+  topic?: string;
   text: string;
   options: string[];
   answer?: number;
@@ -673,6 +674,7 @@ export default function Home() {
       data.quiz.items.map((item: any) => ({
         itemId: item.id,
         subject: item.question.subject,
+        topic: item.question.topic,
         text: item.question.prompt,
         options: item.question.options,
         answer: item.question.correctOption
@@ -702,6 +704,7 @@ export default function Home() {
       data.quiz.items.map((item: any) => ({
         itemId: item.id,
         subject: item.question.subject,
+        topic: item.question.topic,
         text: item.question.prompt,
         options: item.question.options,
         answer: item.question.correctOption
@@ -1054,6 +1057,7 @@ export default function Home() {
               ) : (
                 <article className="question">
                   <b className="subject">{q.subject}</b>
+                  {q.topic && <p className="question-topic">课本章节 · {q.topic}</p>}
                   <h1>{q.text}</h1>
                   {q.imageUrl && (
                     <Image

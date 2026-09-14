@@ -23,31 +23,55 @@ const Logo = () => (
   </div>
 );
 
-function QuestionPrompt({ text }: { text: string }) {
+function QuestionPrompt({ text, subject }: { text: string; subject: string }) {
   const cloze = text.match(
     /^([^\n]+)\n\nRead the passage below\. Choose the best word for blank (\d+)\.\n\n([\s\S]+)$/i,
   );
-  if (!cloze) return <h1>{text}</h1>;
+  if (cloze) {
+    const [, title, blankNumber, passage] = cloze;
+    const target = `___(${blankNumber})`;
+    const passageParts = passage.split(target);
 
-  const [, title, blankNumber, passage] = cloze;
-  const target = `___(${blankNumber})`;
-  const passageParts = passage.split(target);
+    return (
+      <div className="cloze-prompt">
+        <p className="cloze-title">{title}</p>
+        <h1><span>本题作答</span><strong>BLANK {blankNumber}</strong></h1>
+        <p className="cloze-instruction">Read the passage and choose the best answer for the highlighted blank.</p>
+        <p className="cloze-passage">
+          {passageParts.map((part, index) => (
+            <span key={`${blankNumber}-${index}`}>
+              {index > 0 && <mark>{target}</mark>}
+              {part}
+            </span>
+          ))}
+        </p>
+      </div>
+    );
+  }
 
-  return (
-    <div className="cloze-prompt">
-      <p className="cloze-title">{title}</p>
-      <h1><span>本题作答</span><strong>BLANK {blankNumber}</strong></h1>
-      <p className="cloze-instruction">Read the passage and choose the best answer for the highlighted blank.</p>
-      <p className="cloze-passage">
-        {passageParts.map((part, index) => (
-          <span key={`${blankNumber}-${index}`}>
-            {index > 0 && <mark>{target}</mark>}
-            {part}
-          </span>
-        ))}
-      </p>
-    </div>
-  );
+  if (subject === "Matematik") {
+    const divider = text.indexOf(" / ");
+    if (divider > 0) {
+      const bahasaMelayu = text.slice(0, divider).trim();
+      const english = text.slice(divider + 3).trim();
+      if (bahasaMelayu && english) {
+        return (
+          <h1 className="bilingual-prompt">
+            <span className="bilingual-line">
+              <small aria-hidden="true">BM</small>
+              <span lang="ms">{bahasaMelayu}</span>
+            </span>
+            <span className="bilingual-line bilingual-english">
+              <small aria-hidden="true">EN</small>
+              <span lang="en">{english}</span>
+            </span>
+          </h1>
+        );
+      }
+    }
+  }
+
+  return <h1>{text}</h1>;
 }
 
 function malaysiaDateLabel(date: Date) {
@@ -1094,7 +1118,7 @@ export default function Home() {
                 <article className="question">
                   <b className="subject">{q.subject}</b>
                   {q.topic && <p className="question-topic">课本章节 · {q.topic}</p>}
-                  <QuestionPrompt text={q.text} />
+                  <QuestionPrompt text={q.text} subject={q.subject} />
                   {q.imageUrl && (
                     <Image
                       className="question-visual"

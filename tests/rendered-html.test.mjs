@@ -109,6 +109,23 @@ test("highlights the active blank in English rational cloze questions", async ()
   assert.match(styles, /\.cloze-passage mark/);
 });
 
+test("separates Bahasa Melayu and English in Mathematics prompts", async () => {
+  const [page, styles, bank] = await Promise.all([
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/subjects.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/question-bank.ts", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(page, /subject === "Matematik"/);
+  assert.match(page, /className="bilingual-prompt"/);
+  assert.match(page, /lang="ms"/);
+  assert.match(page, /lang="en"/);
+  assert.match(page, /<QuestionPrompt text=\{q\.text\} subject=\{q\.subject\} \/>/);
+  assert.match(styles, /\.bilingual-english/);
+  assert.match(bank, /Hitung: 3\/4 \+ 1\/8 = \/ Calculate: 3\/4 \+ 1\/8 =/);
+  assert.match(bank, /Cari luas sebuah segi tiga[^\n]+Find the area of a triangle/);
+});
+
 test("allows answer changes and switching subjects after completion", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 

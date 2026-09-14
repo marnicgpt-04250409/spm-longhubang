@@ -19,6 +19,18 @@ export function malaysiaDate(date = new Date()) {
   return `${value("year")}-${value("month")}-${value("day")}`;
 }
 
+export function effectiveStreakDays(
+  streakDays: number | null | undefined,
+  lastCheckinDate: string | null | undefined,
+  now = new Date(),
+) {
+  const today = malaysiaDate(now);
+  const yesterday = malaysiaDate(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+  return lastCheckinDate === today || lastCheckinDate === yesterday
+    ? Math.max(0, streakDays ?? 0)
+    : 0;
+}
+
 export async function requireUser(request: Request): Promise<User> {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) throw new Response("请先登录。", { status: 401 });
@@ -35,6 +47,27 @@ export async function requireTeacher(request: Request) {
   const supabase = getAdminClient();
   const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   if (data?.role !== "teacher") throw new Response("仅教师可以使用此功能。", { status: 403 });
+  return user;
+}
+
+export async function requireStudentNickname(request: Request) {
+  const user = await requireUser(request);
+  const { data, error } = await getAdminClient()
+    .from("profiles")
+    .select("role,nickname,school_name")
+    .eq("id", user.id)
+    .single();
+  if (error) throw error;
+  if (data?.role === "student" && (!data.nickname || !data.school_name))
+    throw new Response("请先填写真实姓名和学校后再开始答题。", { status: 409 });
+  return user;
+}
+
+export async function requireBankManager(request: Request) {
+  const user = await requireTeacher(request);
+  const managerId = process.env.MYGURU_ADMIN_USER_ID;
+  if (!managerId || user.id !== managerId)
+    throw new Response("只有题库管理员可以导入、审核或发布题目。", { status: 403 });
   return user;
 }
 

@@ -1,0 +1,27 @@
+.review-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mg-line);
+}
+
+.review-pagination .secondary {
+  margin: 0;
+}
+
+.review-pagination span {
+  color: var(--mg-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 800px) {
+  .review-pagination {
+    justify-content: space-between;
+  }
+  .review-pagination .secondary {
+    padding: 9px 12px;
+  }
+}

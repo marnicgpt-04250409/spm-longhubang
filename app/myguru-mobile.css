@@ -1,0 +1,98 @@
+.teacher-mobile {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  html,
+  body,
+  main,
+  .page {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+  header {
+    gap: 8px;
+    justify-content: flex-start;
+  }
+  .brand,
+  .partner,
+  .teacher-mobile,
+  .user {
+    flex-shrink: 0;
+  }
+  .logo,
+  .logo b {
+    white-space: nowrap;
+  }
+  .logo b {
+    font-size: 17px;
+  }
+  .partner {
+    margin-left: auto;
+    border-left: 0;
+    padding-left: 0;
+  }
+  .partner span {
+    display: none;
+  }
+  .partner img {
+    width: 36px;
+    height: 36px;
+  }
+  .teacher-mobile {
+    display: block;
+    max-width: 78px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .user {
+    display: flex !important;
+    padding: 0;
+  }
+  .user span {
+    display: none;
+  }
+  .cards,
+  .cards article,
+  .mission,
+  .mission > div:last-child,
+  .bar,
+  .teacher-dashboard,
+  .sheet-import,
+  .imports,
+  .upload,
+  .title,
+  .dashboard-actions,
+  .sheet-actions,
+  .import,
+  .import span,
+  .review-filters {
+    min-width: 0;
+    max-width: 100%;
+  }
+  .cards article,
+  .teacher-dashboard,
+  .sheet-import,
+  .imports,
+  .upload {
+    width: 100%;
+    overflow: hidden;
+  }
+  .title {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .mission {
+    align-items: flex-start;
+  }
+  .bar {
+    width: 100%;
+  }
+  .sheet-actions > * {
+    min-width: 0;
+  }
+  .import span {
+    overflow-wrap: anywhere;
+  }
+}

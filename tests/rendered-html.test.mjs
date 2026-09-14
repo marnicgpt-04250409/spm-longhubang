@@ -50,3 +50,31 @@ test("keeps the daily task, practice history, and ranking safeguards in source",
   assert.match(page, /继续练习/);
   assert.doesNotMatch(page, /Nur Aina|陈宇轩|Malayan Union/);
 });
+
+test("keeps production-scale pagination, mobile access, streak, and security safeguards", async () => {
+  const [subjects, daily, practice, questions, dashboard, mobile, server, config, page] = await Promise.all([
+    readFile(new URL("../app/api/subjects/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/daily/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/practice/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/teacher/questions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/teacher/dashboard/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/myguru-mobile.css", import.meta.url), "utf8"),
+    readFile(new URL("../lib/supabase-server.ts", import.meta.url), "utf8"),
+    readFile(new URL("../next.config.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(subjects, /\.range\(/);
+  assert.doesNotMatch(subjects, /\.limit\(1000\)/);
+  assert.match(daily, /listPublishedQuestionIds/);
+  assert.match(practice, /listPublishedQuestionIds/);
+  assert.doesNotMatch(`${daily}\n${practice}`, /\.limit\(200\)/);
+  assert.match(questions, /count:\s*"exact"/);
+  assert.match(questions, /pageSize/);
+  assert.match(dashboard, /questionPageSize/);
+  assert.match(mobile, /\.user\s*\{[\s\S]*display:\s*flex\s*!important/);
+  assert.match(server, /effectiveStreakDays/);
+  assert.match(config, /Content-Security-Policy/);
+  assert.match(config, /X-Content-Type-Options/);
+  assert.match(page, /review-pagination/);
+});

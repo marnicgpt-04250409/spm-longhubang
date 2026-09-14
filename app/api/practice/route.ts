@@ -2,8 +2,12 @@ import {
   apiError,
   getAdminClient,
   malaysiaDate,
-  requireUser,
+  requireStudentNickname,
 } from "@/lib/supabase-server";
+import { after } from "next/server";
+import { syncGoogleSheetSnapshot } from "@/lib/google-sheets-sync";
+import { signedQuestionImageUrls } from "@/lib/question-images";
+import { listPublishedQuestionIds, sampleQuestionIds } from "@/lib/question-bank-query";
 
 const options = (q: Record<string, string | null>) => [
   q.option_a,
@@ -16,7 +20,7 @@ const firstRelation = <T>(value: T | T[] | null | undefined): T | null =>
 
 export async function GET(request: Request) {
   try {
-    const user = await requireUser(request);
+    const user = await requireStudentNickname(request);
     const { searchParams } = new URL(request.url);
     const quizId = searchParams.get("quizId");
     if (!quizId) return Response.json({ quiz: null });
@@ -24,7 +28,7 @@ export async function GET(request: Request) {
     const { data: rawQuiz, error } = await supabase
       .from("practice_quizzes")
       .select(
-        "id, subject, status, correct_count, completed_at, practice_items(id, ordinal, selected_option, questions(id, subject, prompt, option_a, option_b, option_c, option_d, correct_option, explanation))",
+        "id, subject, status, correct_count, completed_at, practice_items(id, ordinal, selected_option, questions(id, subject, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, image_path, image_alt))",
       )
       .eq("id", quizId)
       .eq("user_id", user.id)
@@ -32,6 +36,9 @@ export async function GET(request: Request) {
     if (error) throw error;
     const quiz = rawQuiz as any;
     if (!quiz) return Response.json({ quiz: null });
+    const questionImageUrls = await signedQuestionImageUrls(
+      quiz.practice_items.map((item: any) => firstRelation<any>(item.questions)?.image_path),
+    );
     return Response.json({
       quiz: {
         ...quiz,
@@ -50,6 +57,10 @@ export async function GET(request: Request) {
                 subject: question.subject,
                 prompt: question.prompt,
                 options: options(question),
+                imageUrl: question.image_path
+                  ? questionImageUrls.get(question.image_path)
+                  : undefined,
+                imageAlt: question.image_alt || undefined,
                 correctOption:
                   quiz.status === "submitted"
                     ? question.correct_option
@@ -70,29 +81,20 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const user = await requireUser(request);
+    const user = await requireStudentNickname(request);
     const { subject } = await request.json();
     if (typeof subject !== "string" || !subject.trim())
       return Response.json({ error: "请选择科目。" }, { status: 400 });
     const supabase = getAdminClient();
-    const { data: bank, error } = await supabase
-      .from("questions")
-      .select("id")
-      .eq("subject", subject.trim())
-      .eq("status", "published")
-      .limit(200);
-    if (error) throw error;
-    if (!bank || bank.length < 20)
+    const bank = await listPublishedQuestionIds(subject.trim());
+    if (bank.length < 20)
       return Response.json(
         {
-          error: `「${subject.trim()}」目前只有 ${bank?.length ?? 0} 道已发布题目，至少需要 20 道。`,
+          error: `「${subject.trim()}」目前只有 ${bank.length} 道已发布题目，至少需要 20 道。`,
         },
         { status: 422 },
       );
-    const questionIds = [...bank]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, 20)
-      .map((question) => question.id);
+    const questionIds = sampleQuestionIds(bank, 20);
     const { data: quiz, error: createError } = await supabase
       .from("practice_quizzes")
       .insert({
@@ -121,7 +123,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const user = await requireUser(request);
+    const user = await requireStudentNickname(request);
     const { quizId, answers } = (await request.json()) as {
       quizId: string;
       answers: { itemId: string; option: "A" | "B" | "C" | "D" }[];
@@ -165,14 +167,18 @@ export async function PATCH(request: Request) {
           : 0),
       0,
     );
-    await Promise.all(
-      items.map((item) =>
-        supabase
-          .from("practice_items")
-          .update({ selected_option: choice.get(item.id) })
-          .eq("id", item.id),
-      ),
+    const { data: updatedItems, error: answerUpdateError } = await supabase.rpc(
+      "set_practice_quiz_item_answers",
+      {
+        p_quiz_id: quizId,
+        p_answers: answers.map(({ itemId, option }) => ({
+          id: itemId,
+          selected_option: option,
+        })),
+      },
     );
+    if (answerUpdateError || updatedItems !== 20)
+      throw answerUpdateError || new Error("Practice answer update was incomplete");
     const { error: updateError } = await supabase
       .from("practice_quizzes")
       .update({
@@ -183,6 +189,11 @@ export async function PATCH(request: Request) {
       .eq("id", quizId)
       .eq("status", "active");
     if (updateError) throw updateError;
+    after(() =>
+      syncGoogleSheetSnapshot().catch((syncError) =>
+        console.error("Google Sheet practice sync failed", syncError),
+      ),
+    );
     return Response.json({ correct });
   } catch (error) {
     return apiError(error);

@@ -776,7 +776,6 @@ export default function Home() {
     }
   }
   function pick(a: number) {
-    if (answers[n] !== undefined) return;
     const copy = [...answers];
     copy[n] = a;
     setAnswers(copy);
@@ -937,7 +936,7 @@ export default function Home() {
               <div>
                 <p className="eyebrow">CHOOSE YOUR SUBJECT</p>
                 <h2>今天想挑战哪一科？</h2>
-                <p>每日首轮选定后不可更换，完成该科 20 题将计入日榜。</p>
+                <p>未完成的科目开始每日 20 题；已完成的科目会进入自由练习。</p>
               </div>
               <div className="subject-grid">
                 {subjectList.length === 0 && (
@@ -967,10 +966,15 @@ export default function Home() {
                 <button
                   className="primary"
                   disabled={subjectList.length === 0}
-                  onClick={() => begin()}
+                  onClick={() =>
+                    begin(
+                      selectedSubject,
+                      selectedDaily?.status === "submitted" ? "practice" : "daily",
+                    )
+                  }
                 >
                   {selectedSubject
-                    ? `开始 ${selectedSubject}　→`
+                    ? `${selectedDaily?.status === "submitted" ? "练习" : "开始"} ${selectedSubject}　→`
                     : "等待题库发布"}
                 </button>
               </footer>
@@ -1009,15 +1013,11 @@ export default function Home() {
               </div>
               <button
                 className="link"
-                onClick={() =>
-                  selectedDaily?.status === "submitted"
-                    ? begin(selectedSubject, "practice")
-                    : setChoosing(true)
-                }
+                onClick={() => setChoosing(true)}
                 disabled={subjectList.length === 0}
               >
                 {selectedDaily?.status === "submitted"
-                  ? "继续练习这科　→"
+                  ? "选择科目继续练习　→"
                   : "更换科目 / 开始答题　→"}
               </button>
             </article>
@@ -1161,7 +1161,10 @@ export default function Home() {
                     className="secondary"
                     onClick={() => begin(selectedSubject, "practice")}
                   >
-                    继续练习
+                    继续练习这科
+                  </button>
+                  <button className="secondary" onClick={() => { setChoosing(true); setTab("home"); }}>
+                    选择其他科目
                   </button>
                 </>
               ) : (
@@ -1177,6 +1180,9 @@ export default function Home() {
                     onClick={() => setTab("history")}
                   >
                     查看我的记录
+                  </button>
+                  <button className="secondary" onClick={() => { setChoosing(true); setTab("home"); }}>
+                    选择其他科目
                   </button>
                 </>
               )}

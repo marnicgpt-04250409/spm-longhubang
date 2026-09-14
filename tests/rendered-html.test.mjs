@@ -108,3 +108,12 @@ test("highlights the active blank in English rational cloze questions", async ()
   assert.match(page, /<mark>\{target\}<\/mark>/);
   assert.match(styles, /\.cloze-passage mark/);
 });
+
+test("allows answer changes and switching subjects after completion", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.doesNotMatch(page, /if \(answers\[n\] !== undefined\) return/);
+  assert.match(page, /选择科目继续练习/);
+  assert.match(page, /选择其他科目/);
+  assert.match(page, /selectedDaily\?\.status === "submitted" \? "practice" : "daily"/);
+});

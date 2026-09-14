@@ -789,10 +789,12 @@ export default function Home() {
           <Image src="/myguru-logo.png" alt="My Guru Education" width={50} height={50} priority />
         </div>
         <nav>
+          <button onClick={() => setTab("home")}>首页</button>
           <button onClick={() => setTab("rank")}>今日排行榜</button>
           <button onClick={() => setTab("history")}>我的记录</button>
           <button onClick={() => setTab("teacher")}>教师中心</button>
         </nav>
+        <button className="home-mobile" onClick={() => setTab("home")}>首页</button>
         <button className="teacher-mobile" onClick={() => setTab("teacher")}>
           教师中心
         </button>
@@ -1645,14 +1647,14 @@ export default function Home() {
             <div className="title">
               <div>
                 <p className="eyebrow">SMART REVISION</p>
-                <h2>我的章节诊断</h2>
+                <h2>我的弱项章节</h2>
               </div>
               <b className="pill">按正确率排序</b>
             </div>
-            <p className="mistake-intro">题目有章节标签后，系统会根据你的实际作答找出较需要复习的部分。</p>
+            <p className="mistake-intro">系统按各章节的答题正确率排列；正确率较低的章节会优先显示，帮助你决定先复习哪里。这个分析不会影响成绩或排行榜。</p>
             {learningInsights.length ? learningInsights.slice(0, 6).map((item) => (
               <p className="insight-row" key={item.topic}><b>{item.topic}</b><span>{item.accuracy}% 正确 · {item.attempts} 题</span></p>
-            )) : <p className="muted-copy">暂时没有足够的章节资料。老师之后导入带「章节／主题」的题目后，诊断会自动出现。</p>}
+            )) : <p className="muted-copy">完成更多带有章节标签的题目后，系统会在这里显示你的弱项章节。</p>}
           </article>
           <article className="mistake-book">
             <div className="title">

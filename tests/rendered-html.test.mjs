@@ -22,6 +22,7 @@ test("renders the real SPM 龙虎榜 entry page", async () => {
   assert.match(html, /SPM 龙虎榜 \| 每日冲刺/);
   assert.match(html, /My Guru Education/);
   assert.match(html, /Google 登录/);
+  assert.match(html, /首页/);
   assert.match(html, /教师中心/);
   assert.match(html, /今天还没有成绩，完成首轮任务即可上榜。/);
   assert.doesNotMatch(html, /Nur Aina|陈宇轩|Malayan Union/);
@@ -48,6 +49,8 @@ test("keeps the daily task, practice history, and ranking safeguards in source",
   assert.match(leaderboard, /rank = index \+ 1/);
   assert.match(page, /我的练习记录/);
   assert.match(page, /继续练习/);
+  assert.match(page, /我的弱项章节/);
+  assert.match(page, /不会影响成绩或排行榜/);
   assert.doesNotMatch(page, /Nur Aina|陈宇轩|Malayan Union/);
 });
 

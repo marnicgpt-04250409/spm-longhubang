@@ -8,6 +8,7 @@ import "./nickname-dialog.css";
 import "./myguru.css";
 import "./myguru-mobile.css";
 import "./pagination.css";
+import "./header-controls.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

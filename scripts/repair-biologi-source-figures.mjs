@@ -14,7 +14,7 @@ const fields = "id,source_key,image_path,status,correct_option,prompt,option_a,o
 const before = await supabase.from("questions").select(fields).in("source_key", figures.map((item) => item.sourceKey));
 if (before.error) throw before.error;
 assert.equal(before.data.length, 4);
-const protectedFields = ({image_path, ...question}) => JSON.stringify(question);
+const protectedFields = (row) => JSON.stringify(Object.fromEntries(Object.entries(row).filter(([key]) => key !== "image_path")));
 const protectedBefore = new Map(before.data.map((row) => [row.source_key, protectedFields(row)]));
 for (const figure of figures) {
   const original = before.data.find((row) => row.source_key === figure.sourceKey);

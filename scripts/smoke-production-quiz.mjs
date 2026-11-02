@@ -15,6 +15,26 @@ let userId;
 let token;
 const results = [];
 
+async function cleanupQaAccount(id) {
+  // Remove only this generated account's unsubmitted QA sessions.
+  for (const [quizzes, items] of [["daily_quizzes", "quiz_items"], ["practice_quizzes", "practice_items"]]) {
+    const owned = await admin.from(quizzes).select("id").eq("user_id", id);
+    if (owned.error) throw owned.error;
+    const ids = (owned.data ?? []).map((row) => row.id);
+    if (ids.length) {
+      const children = await admin.from(items).delete().in("quiz_id", ids);
+      if (children.error) throw children.error;
+      const parents = await admin.from(quizzes).delete().eq("user_id", id);
+      if (parents.error) throw parents.error;
+    }
+  }
+  const profile = await admin.from("profiles").delete().eq("id", id);
+  if (profile.error) throw profile.error;
+  const deleted = await admin.auth.admin.deleteUser(id);
+  if (deleted.error) throw deleted.error;
+  console.log(JSON.stringify({ temporaryQaAccountRemoved: true }));
+}
+
 async function api(path, options = {}) {
   const response = await fetch(`${base}${path}`, {
     ...options,
@@ -70,22 +90,6 @@ try {
   console.log(JSON.stringify({ daily: results, biologyPractice: "passed", studentTeacherAccess: "blocked", invalidSubject: "rejected", submittedScores: 0 }));
 } finally {
   if (userId) {
-    // Remove only this generated account's unsubmitted QA sessions.
-    for (const [quizzes, items] of [["daily_quizzes", "quiz_items"], ["practice_quizzes", "practice_items"]]) {
-      const owned = await admin.from(quizzes).select("id").eq("user_id", userId);
-      if (owned.error) throw owned.error;
-      const ids = (owned.data ?? []).map((row) => row.id);
-      if (ids.length) {
-        const children = await admin.from(items).delete().in("quiz_id", ids);
-        if (children.error) throw children.error;
-        const parents = await admin.from(quizzes).delete().eq("user_id", userId);
-        if (parents.error) throw parents.error;
-      }
-    }
-    const profile = await admin.from("profiles").delete().eq("id", userId);
-    if (profile.error) throw profile.error;
-    const deleted = await admin.auth.admin.deleteUser(userId);
-    if (deleted.error) throw deleted.error;
-    console.log(JSON.stringify({ temporaryQaAccountRemoved: true }));
+    await cleanupQaAccount(userId);
   }
 }

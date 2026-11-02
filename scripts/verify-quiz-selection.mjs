@@ -53,7 +53,18 @@ try {
   assert.equal(unchanged.id, dailyId);
   assert.equal(unchanged.existing, true);
   assert.deepEqual(await items("daily", dailyId), dailyRows.map(row => ({...row})));
-  console.log(JSON.stringify({subject,publishedQuestions: bank.length,concurrentDailyStarts: 20,concurrentPracticeStarts: 20,oneCompleteAttemptPerStart: true,allUnseenQuestionsUsedBeforeRepeats: true,leastSeenQuestionsPreferred: true,dailyRemainsLocked: true,practiceRounds: rounds}));
+  const withdrawn = checked(await admin.from("questions").select("id").eq("subject",subject).eq("status","draft").limit(1));
+  assert.equal(withdrawn.length, 1);
+  const today = new Intl.DateTimeFormat("en-CA", {timeZone: "Asia/Kuala_Lumpur"}).format(new Date());
+  const legacy = checked(await admin.from("practice_quizzes").insert({user_id: userId,subject,local_date: today}).select("id").single());
+  checked(await admin.from("practice_items").insert([...bank.slice(0,19),withdrawn[0]].map((row,index) => ({quiz_id: legacy.id,question_id: row.id,ordinal: index+1}))));
+  const usable = await start("practice");
+  assert.notEqual(usable.id, legacy.id, "Withdrawn questions must not be resumed");
+  assert.equal((await items("practice",usable.id)).length,20);
+  const orphan = checked(await admin.from("practice_quizzes").insert({user_id: userId,subject,local_date: today}).select("id").single());
+  assert.notEqual(orphan.id, usable.id);
+  assert.equal((await start("practice")).id, usable.id, "Incomplete legacy attempts must not be resumed");
+  console.log(JSON.stringify({subject,publishedQuestions: bank.length,concurrentDailyStarts: 20,concurrentPracticeStarts: 20,oneCompleteAttemptPerStart: true,allUnseenQuestionsUsedBeforeRepeats: true,leastSeenQuestionsPreferred: true,dailyRemainsLocked: true,unavailableLegacyAttemptsSkipped: true,practiceRounds: rounds}));
 } finally {
   if (userId) checked(await admin.auth.admin.deleteUser(userId));
   console.log(JSON.stringify({temporarySelectionAccountRemoved: true}));

@@ -95,10 +95,14 @@ try {
   assert.equal(loadedPractice.body.quiz.items.length, 20);
   assert.equal(loadedPractice.body.quiz.practice_items, undefined);
   assert.ok(loadedPractice.body.quiz.items.every((item) => item.question.subject === "Biologi" && item.question.correctOption === undefined));
+  const biologyDaily = (await api("/api/daily?subject=Biologi")).body.quiz;
+  const dailyQuestionIds = new Set(biologyDaily.items.map(item => item.question.id));
+  assert.ok(loadedPractice.body.quiz.items.every(item => !dailyQuestionIds.has(item.question.id)), "Practice must prefer questions not used in the daily task");
+  const resumedPractice = await Promise.all(Array.from({length: 10}, () => api("/api/practice", {method: "POST",body: JSON.stringify({subject: "Biologi"})})));
+  assert.ok(resumedPractice.every(result => result.response.status === 200 && result.body.id === practice.body.id), "Concurrent practice starts must reuse the unfinished attempt");
   for (const [kind, quizId, items] of [
     ["practice", practice.body.id, loadedPractice.body.quiz.items],
-    ["daily", (await api("/api/daily?subject=Biologi")).body.quiz.id,
-      (await api("/api/daily?subject=Biologi")).body.quiz.items],
+    ["daily", biologyDaily.id, biologyDaily.items],
   ]) {
     const invalidAnswers = Array.from({length: 20}, () => ({itemId: items[0].id, option: "A"}));
     const rejected = await api(`/api/${kind}`, {method: "PATCH", body: JSON.stringify({quizId, answers: invalidAnswers})});
@@ -111,7 +115,7 @@ try {
   assert.equal(teacher.response.status, 403, "Students must not access teacher question management");
   const invalid = await api("/api/daily", { method: "POST", body: JSON.stringify({ subject: "" }) });
   assert.equal(invalid.response.status, 400);
-  console.log(JSON.stringify({ daily: results, biologyPractice: "passed", studentTeacherAccess: "blocked", invalidSubject: "rejected", directAnswerAccess: "blocked", directRoleAndStreakUpdate: "blocked", serverNameUpdate: "passed", submittedScores: 0 }));
+  console.log(JSON.stringify({ daily: results, biologyPractice: "passed", practiceAvoidsDailyQuestions: true, concurrentPracticeResume: "passed", studentTeacherAccess: "blocked", invalidSubject: "rejected", directAnswerAccess: "blocked", directRoleAndStreakUpdate: "blocked", serverNameUpdate: "passed", submittedScores: 0 }));
 } finally {
   if (userId) {
     await cleanupQaAccount(userId);

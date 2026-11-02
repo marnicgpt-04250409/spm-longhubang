@@ -1,5 +1,7 @@
 import { google } from "googleapis";
 import { getAdminClient, malaysiaDate } from "@/lib/supabase-server";
+import { readAllPages } from "@/lib/pagination";
+import type { User } from "@supabase/supabase-js";
 
 const spreadsheetId = process.env.MYGURU_GOOGLE_SHEET_ID;
 const serviceAccountJson = process.env.MYGURU_GOOGLE_SERVICE_ACCOUNT_JSON;
@@ -18,6 +20,7 @@ type Quiz = {
   quiz_items?: QuizItem[];
   practice_items?: QuizItem[];
 };
+type Profile = {id: string; nickname: string | null; school_name: string | null; role: string; streak_days: number};
 
 const first = <T,>(value: T | T[] | null | undefined): T | null =>
   Array.isArray(value) ? value[0] ?? null : value ?? null;
@@ -62,30 +65,27 @@ export async function syncGoogleSheetSnapshot() {
   const supabase = getAdminClient();
   const today = malaysiaDate();
   const syncedAt = `${malaysiaDateTime(new Date().toISOString())}（马来西亚时间）`;
-  const [profilesResult, usersResult, dailyResult, practiceResult] = await Promise.all([
-    supabase.from("profiles").select("id,nickname,school_name,role,streak_days"),
-    supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
-    supabase
+  const [allProfiles, users, daily, practice] = await Promise.all([
+    readAllPages<Profile>((page, size) => supabase.from("profiles").select("id,nickname,school_name,role,streak_days").order("id").range(page * size, (page + 1) * size - 1)),
+    readAllPages<User>(async (page, size) => {
+      const result = await supabase.auth.admin.listUsers({page: page + 1, perPage: size});
+      return {data: result.data.users, error: result.error};
+    }),
+    readAllPages<Quiz>((page, size) => supabase
       .from("daily_quizzes")
       .select("id,user_id,subject,correct_count,completed_at,quiz_items(ordinal,selected_option,questions(prompt,correct_option))")
       .eq("local_date", today)
-      .eq("status", "submitted"),
-    supabase
+      .eq("status", "submitted").order("id").range(page * size, (page + 1) * size - 1)),
+    readAllPages<Quiz>((page, size) => supabase
       .from("practice_quizzes")
       .select("id,user_id,subject,correct_count,completed_at,practice_items(ordinal,selected_option,questions(prompt,correct_option))")
       .eq("local_date", today)
-      .eq("status", "submitted"),
+      .eq("status", "submitted").order("id").range(page * size, (page + 1) * size - 1)),
   ]);
-  for (const result of [profilesResult, dailyResult, practiceResult]) {
-    if (result.error) throw result.error;
-  }
-  if (usersResult.error) throw usersResult.error;
-  const profiles = (profilesResult.data ?? []).filter((profile) => profile.role === "student");
+  const profiles = allProfiles.filter((profile) => profile.role === "student");
   const emailById = new Map(
-    (usersResult.data.users ?? []).map((user) => [user.id, user.email || ""]),
+    users.map((user) => [user.id, user.email || ""]),
   );
-  const daily = (dailyResult.data ?? []) as Quiz[];
-  const practice = (practiceResult.data ?? []) as Quiz[];
   const studentRows = profiles.map((profile) => {
     const ownDaily = daily.filter((quiz) => quiz.user_id === profile.id);
     const ownPractice = practice.filter((quiz) => quiz.user_id === profile.id);
@@ -98,7 +98,7 @@ export async function syncGoogleSheetSnapshot() {
       emailById.get(profile.id) || "",
       profile.streak_days,
       ownDaily.length ? "已完成" : "未开始",
-      ownDaily.reduce((total, quiz) => total + (quiz.correct_count ?? 0), 0) || "—",
+      ownDaily.length ? ownDaily.reduce((total, quiz) => total + (quiz.correct_count ?? 0), 0) : "—",
       malaysiaDateTime(latestDaily?.completed_at ?? null),
       ownPractice.length,
       ownPractice.reduce((total, quiz) => total + (quiz.correct_count ?? 0), 0),
@@ -140,15 +140,24 @@ export async function syncGoogleSheetSnapshot() {
   }
   const historyDates = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: "每日历史!A2:A1000",
+    range: "每日历史!A2:A",
   });
   const existingHistoryRow = (historyDates.data.values ?? []).findIndex((row) => row[0] === today);
   const historyRow = existingHistoryRow >= 0 ? existingHistoryRow + 2 : (historyDates.data.values?.length ?? 0) + 2;
+  const requiredRows: Record<string, number> = {"学生记录": studentRows.length + 1, "作答明细": detailRows.length + 1, "每日历史": historyRow};
+  const expand = (workbook.data.sheets ?? []).flatMap(sheet => {
+    const properties = sheet.properties;
+    const needed = requiredRows[properties?.title || ""];
+    return needed && needed > (properties?.gridProperties?.rowCount ?? 0) ? [{
+      updateSheetProperties: {properties: {sheetId: properties?.sheetId, gridProperties: {rowCount: needed}}, fields: "gridProperties.rowCount"},
+    }] : [];
+  });
+  if (expand.length) await sheets.spreadsheets.batchUpdate({spreadsheetId, requestBody: {requests: expand}});
   const dailyCorrect = daily.reduce((total, quiz) => total + (quiz.correct_count ?? 0), 0);
   const practiceCorrect = practice.reduce((total, quiz) => total + (quiz.correct_count ?? 0), 0);
   await sheets.spreadsheets.values.batchClear({
     spreadsheetId,
-    requestBody: { ranges: ["学生记录!A2:K1000", "作答明细!A2:J10000"] },
+    requestBody: { ranges: ["学生记录!A2:K", "作答明细!A2:J"] },
   });
   await sheets.spreadsheets.values.batchUpdate({
     spreadsheetId,

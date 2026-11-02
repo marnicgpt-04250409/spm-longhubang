@@ -4,6 +4,7 @@ import {
   requireBankManager,
 } from "@/lib/supabase-server";
 import { signedQuestionImageUrls } from "@/lib/question-images";
+import { questionPublicationIssue } from "@/lib/question-publication";
 
 const validOption = (value: unknown): value is "A" | "B" | "C" | "D" =>
   typeof value === "string" && /^[ABCD]$/.test(value);
@@ -154,7 +155,7 @@ export async function PATCH(request: Request) {
       }
       const { data: selected, error: selectedError } = await supabase
         .from("questions")
-        .select("id,upload_id,answer_confirmed,status")
+        .select("id,upload_id,answer_confirmed,status,prompt,option_a,option_b,option_c,option_d,image_path")
         .eq("author_id", user.id)
         .eq("status", "draft")
         .in("id", uniqueIds);
@@ -167,6 +168,12 @@ export async function PATCH(request: Request) {
           { error: `有 ${unconfirmed.length} 道题目尚未确认正确答案，不能批量发布。` },
           { status: 400 },
         );
+      const invalid = selected.map((item) => ({ id: item.id, error: questionPublicationIssue(item) })).filter((item) => item.error);
+      if (invalid.length)
+        return Response.json({ error: `有 ${invalid.length} 道题目缺少图片或完整选项，不能发布。`, issues: invalid }, { status: 400 });
+      const imageUrls = await signedQuestionImageUrls(selected.map((item) => item.image_path));
+      if (selected.some((item) => item.image_path && !imageUrls.has(item.image_path)))
+        return Response.json({ error: "部分题目的图片无法读取，请重新上传后再发布。" }, { status: 400 });
       const { data, error } = await supabase
         .from("questions")
         .update({ status: "published", published_at: new Date().toISOString() })
@@ -261,6 +268,21 @@ export async function PATCH(request: Request) {
     }
     if (publish !== true)
       return Response.json({ error: "无效发布请求。" }, { status: 400 });
+    const { data: candidate, error: candidateError } = await supabase
+      .from("questions")
+      .select("prompt,option_a,option_b,option_c,option_d,image_path")
+      .eq("id", id)
+      .eq("author_id", user.id)
+      .single();
+    if (candidateError) throw candidateError;
+    const publicationIssue = questionPublicationIssue(candidate);
+    if (publicationIssue)
+      return Response.json({ error: publicationIssue }, { status: 400 });
+    if (candidate.image_path) {
+      const imageUrls = await signedQuestionImageUrls([candidate.image_path]);
+      if (!imageUrls.has(candidate.image_path))
+        return Response.json({ error: "题目图片无法读取，请重新上传后再发布。" }, { status: 400 });
+    }
     const { data, error } = await supabase
       .from("questions")
       .update({ status: "published", published_at: new Date().toISOString() })

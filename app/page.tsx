@@ -1120,15 +1120,18 @@ export default function Home() {
                   {q.topic && <p className="question-topic">课本章节 · {q.topic}</p>}
                   <QuestionPrompt text={q.text} subject={q.subject} />
                   {q.imageUrl && (
-                    <Image
-                      className="question-visual"
-                      src={q.imageUrl}
-                      alt={q.imageAlt || "题目插图"}
-                      width={1200}
-                      height={800}
-                      sizes="(max-width: 800px) calc(100vw - 78px), 680px"
-                      unoptimized
-                    />
+                    <a className="question-image-link" href={q.imageUrl} target="_blank" rel="noopener noreferrer" aria-label="在新窗口打开题目原图，可放大查看">
+                      <Image
+                        className="question-visual"
+                        src={q.imageUrl}
+                        alt={q.imageAlt || "题目插图"}
+                        width={1200}
+                        height={800}
+                        sizes="(max-width: 800px) calc(100vw - 78px), 680px"
+                        unoptimized
+                      />
+                      <span>点击图片放大查看 ↗</span>
+                    </a>
                   )}
                   <div className="options">
                     {q.options.map((v, i) => (

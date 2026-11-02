@@ -23,7 +23,7 @@ export async function GET(request: Request) {
     const subject = new URL(request.url).searchParams.get("subject")?.trim();
     if (!subject) return Response.json({ quiz: null });
     const supabase = getAdminClient();
-    const { data: rawQuiz } = await supabase
+    const { data: rawQuiz, error: readError } = await supabase
       .from("daily_quizzes")
       .select(
         "id, subject, status, correct_count, completed_at, quiz_items(id, ordinal, selected_option, questions(id, subject, topic, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, image_path, image_alt))",
@@ -32,6 +32,7 @@ export async function GET(request: Request) {
       .eq("local_date", malaysiaDate())
       .eq("subject", subject)
       .maybeSingle();
+    if (readError) throw readError;
     const quiz = rawQuiz as any;
     if (!quiz) return Response.json({ quiz: null });
     const questionImageUrls = await signedQuestionImageUrls(
@@ -39,7 +40,11 @@ export async function GET(request: Request) {
     );
     return Response.json({
       quiz: {
-        ...quiz,
+        id: quiz.id,
+        subject: quiz.subject,
+        status: quiz.status,
+        correct_count: quiz.correct_count,
+        completed_at: quiz.completed_at,
         items: quiz.quiz_items
           .sort((a: any, b: any) => a.ordinal - b.ordinal)
           .map((item: any) => {

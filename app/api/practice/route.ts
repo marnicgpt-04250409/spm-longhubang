@@ -41,7 +41,11 @@ export async function GET(request: Request) {
     );
     return Response.json({
       quiz: {
-        ...quiz,
+        id: quiz.id,
+        subject: quiz.subject,
+        status: quiz.status,
+        correct_count: quiz.correct_count,
+        completed_at: quiz.completed_at,
         items: quiz.practice_items
           .sort((a: any, b: any) => a.ordinal - b.ordinal)
           .map((item: any) => {

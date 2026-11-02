@@ -13,7 +13,7 @@ async function loadModule(file, prelude = "") {
 }
 
 for (const [route, relation] of [["daily", "quiz_items"], ["practice", "practice_items"]]) {
-  for (const status of ["in_progress", "submitted"]) {
+  for (const status of ["active", "submitted"]) {
     test(`${route} ${status} returns only safe quiz fields and correctly gates answers`, async () => {
       const raw = {
         id: "quiz-test", subject: "Biologi", status, correct_count: 0, completed_at: null,
@@ -65,3 +65,44 @@ test("publication rejects missing diagrams and placeholder options while permitt
   assert.match(questionPublicationIssue({...base, option_d: "Pilihan D dalam rajah"}), /占位/);
   assert.match(questionPublicationIssue({...base, option_d: base.option_a}), /重复/);
 });
+
+for (const route of ["daily", "practice"]) {
+  test(`${route} submission delegates ownership and scoring to the atomic transaction`, async () => {
+    const quizId = "10000000-0000-4000-8000-000000000000";
+    const answers = Array.from({length: 20}, (_, i) => ({
+      itemId: `20000000-0000-4000-8000-${String(i).padStart(12, "0")}`, option: "B",
+    }));
+    const prelude = `
+      export const calls = [];
+      export const effects = [];
+      export let outcome = {correct: 13, streak: 2};
+      export function setOutcome(value) { outcome = value; }
+      const requireStudentNickname = async () => ({id: "verified-student"});
+      const after = (callback) => effects.push(callback);
+      const syncGoogleSheetSnapshot = async () => {};
+      const apiError = (error) => { throw error; };
+      const getAdminClient = () => ({rpc: async (name, args) => {
+        calls.push({name, args}); return {data: outcome, error: null};
+      }});
+    `;
+    const handler = await loadModule(`../app/api/${route}/route.ts`, prelude);
+    const submit = (body) => handler.PATCH(new Request("https://example.test", {
+      method: "PATCH", body: JSON.stringify(body),
+    }));
+    const response = await submit({quizId, answers, userId: "forged-user"});
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), route === "daily" ? {correct: 13, streak: 2} : {correct: 13});
+    assert.deepEqual(handler.calls[0], {name: "submit_quiz_attempt", args: {
+      p_kind: route, p_user_id: "verified-student", p_quiz_id: quizId,
+      p_answers: answers.map(a => ({id: a.itemId, selected_option: a.option})),
+    }});
+    assert.equal(handler.effects.length, 1);
+    handler.setOutcome({error: "Already submitted", status: 409});
+    assert.equal((await submit({quizId, answers})).status, 409);
+    assert.equal(handler.effects.length, 1, "rejected retries must not sync the sheet");
+    for (const body of [{quizId, answers: [null, ...answers.slice(1)]}, {quizId: "invalid", answers}, {quizId, answers: answers.slice(1)}]) {
+      assert.equal((await submit(body)).status, 400);
+    }
+    assert.equal(handler.calls.length, 2, "invalid input must not reach the database");
+  });
+}

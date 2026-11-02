@@ -139,49 +139,19 @@ export async function PATCH(request: Request) {
       answers: { itemId: string; option: "A" | "B" | "C" | "D" }[];
     };
     if (
-      !quizId ||
+      typeof quizId !== "string" ||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(quizId) ||
       !Array.isArray(answers) ||
       answers.length !== 20 ||
-      answers.some((a) => !/^[ABCD]$/.test(a.option))
+      answers.some((a) => !a || typeof a.itemId !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(a.itemId) || !/^[ABCD]$/.test(a.option))
     )
       return Response.json({ error: "提交资料不完整。" }, { status: 400 });
     const supabase = getAdminClient();
-    const { data: quiz } = await supabase
-      .from("daily_quizzes")
-      .select("id, status")
-      .eq("id", quizId)
-      .eq("user_id", user.id)
-      .eq("local_date", malaysiaDate())
-      .maybeSingle();
-    if (!quiz)
-      return Response.json({ error: "找不到今天的任务。" }, { status: 404 });
-    if (quiz.status === "submitted")
-      return Response.json(
-        { error: "今天的正式任务已经提交。" },
-        { status: 409 },
-      );
-    const { data: rawItems, error } = await supabase
-      .from("quiz_items")
-      .select("id, questions(correct_option)")
-      .eq("quiz_id", quizId);
-    const items = rawItems as any[] | null;
-    if (error || !items || items.length !== 20)
-      throw error || new Error("Quiz items missing");
-    const choice = new Map(answers.map((a) => [a.itemId, a.option]));
-    if (choice.size !== 20 || items.some((item) => !choice.has(item.id)))
-      return Response.json({ error: "答案与题目不一致。" }, { status: 400 });
-    const correct = items.reduce(
-      (score: number, item: any) =>
-        score +
-        (choice.get(item.id) ===
-        firstRelation<any>(item.questions)?.correct_option
-          ? 1
-          : 0),
-      0,
-    );
-    const { data: updatedItems, error: answerUpdateError } = await supabase.rpc(
-      "set_daily_quiz_item_answers",
+    const { data: result, error } = await supabase.rpc(
+      "submit_quiz_attempt",
       {
+        p_kind: "daily",
+        p_user_id: user.id,
         p_quiz_id: quizId,
         p_answers: answers.map(({ itemId, option }) => ({
           id: itemId,
@@ -189,44 +159,15 @@ export async function PATCH(request: Request) {
         })),
       },
     );
-    if (answerUpdateError || updatedItems !== 20)
-      throw answerUpdateError || new Error("Quiz answer update was incomplete");
-    const now = new Date().toISOString();
-    const { error: updateError } = await supabase
-      .from("daily_quizzes")
-      .update({
-        status: "submitted",
-        correct_count: correct,
-        completed_at: now,
-      })
-      .eq("id", quizId)
-      .eq("status", "active");
-    if (updateError) throw updateError;
-    const today = malaysiaDate();
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("streak_days,last_checkin_date")
-      .eq("id", user.id)
-      .single();
-    const yesterdayDate = malaysiaDate(
-      new Date(Date.now() - 24 * 60 * 60 * 1000),
-    );
-    const streak =
-      profile?.last_checkin_date === today
-        ? profile.streak_days
-        : profile?.last_checkin_date === yesterdayDate
-          ? profile.streak_days + 1
-          : 1;
-    await supabase
-      .from("profiles")
-      .update({ streak_days: streak, last_checkin_date: today })
-      .eq("id", user.id);
+    if (error) throw error;
+    if (result.error)
+      return Response.json({ error: result.error }, { status: result.status });
     after(() =>
       syncGoogleSheetSnapshot().catch((syncError) =>
         console.error("Google Sheet daily sync failed", syncError),
       ),
     );
-    return Response.json({ correct, streak });
+    return Response.json({ correct: result.correct, streak: result.streak });
   } catch (error) {
     return apiError(error);
   }

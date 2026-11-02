@@ -58,6 +58,18 @@ try {
   const signedIn = await authClient.auth.signInWithPassword({ email, password });
   if (signedIn.error) throw signedIn.error;
   token = signedIn.data.session.access_token;
+  const anonymous = createClient(url, process.env.SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+  const anonymousAnswers = await anonymous.from("questions").select("id,correct_option").limit(1);
+  assert.equal(anonymousAnswers.data?.length ?? 0, 0, "Anonymous database access must not reveal answers");
+  const studentAnswers = await authClient.from("questions").select("id,correct_option").limit(1);
+  assert.equal(studentAnswers.data?.length ?? 0, 0, "Student database access must not reveal answers");
+  const directProfileUpdate = await authClient.from("profiles").update({ role: "student", streak_days: 0 }).eq("id", userId).select("id");
+  assert.ok(directProfileUpdate.error || !directProfileUpdate.data?.length, "Browser clients must not update server-owned profile fields");
+  const visibleProfiles = await authClient.from("profiles").select("id");
+  if (visibleProfiles.error) throw visibleProfiles.error;
+  assert.deepEqual(visibleProfiles.data.map((row) => row.id), [userId], "Student can read only their own profile");
+  const nameUpdate = await api("/api/me", { method: "PATCH", body: JSON.stringify({ nickname: `检查${Date.now()}`, schoolName: "其他" }) });
+  assert.equal(nameUpdate.response.status, 200, "Names must still be editable through the authenticated server API");
   const { body: subjectBody, response: subjectResponse } = await api("/api/subjects");
   assert.equal(subjectResponse.status, 200);
   for (const subject of subjectBody.subjects) {
@@ -87,7 +99,7 @@ try {
   assert.equal(teacher.response.status, 403, "Students must not access teacher question management");
   const invalid = await api("/api/daily", { method: "POST", body: JSON.stringify({ subject: "" }) });
   assert.equal(invalid.response.status, 400);
-  console.log(JSON.stringify({ daily: results, biologyPractice: "passed", studentTeacherAccess: "blocked", invalidSubject: "rejected", submittedScores: 0 }));
+  console.log(JSON.stringify({ daily: results, biologyPractice: "passed", studentTeacherAccess: "blocked", invalidSubject: "rejected", directAnswerAccess: "blocked", directRoleAndStreakUpdate: "blocked", serverNameUpdate: "passed", submittedScores: 0 }));
 } finally {
   if (userId) {
     await cleanupQaAccount(userId);

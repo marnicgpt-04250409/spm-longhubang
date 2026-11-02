@@ -42,7 +42,7 @@ test("keeps the daily task, practice history, and ranking safeguards in source",
   assert.match(daily, /至少需要 20 道/);
   assert.match(practice, /from\("practice_quizzes"\)/);
   assert.match(practice, /from\("practice_items"\)/);
-  assert.match(practice, /from\("practice_quizzes"\)[\s\S]{0,100}?\.update\(/);
+  assert.match(practice, /"submit_quiz_attempt"/);
   assert.match(migration, /alter table public\.practice_quizzes enable row level security/);
   assert.match(migration, /alter table public\.practice_items enable row level security/);
   assert.match(leaderboard, /previousScore/);

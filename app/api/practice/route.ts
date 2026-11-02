@@ -134,47 +134,19 @@ export async function PATCH(request: Request) {
       answers: { itemId: string; option: "A" | "B" | "C" | "D" }[];
     };
     if (
-      !quizId ||
+      typeof quizId !== "string" ||
+      !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(quizId) ||
       !Array.isArray(answers) ||
       answers.length !== 20 ||
-      answers.some((answer) => !/^[ABCD]$/.test(answer.option))
+      answers.some((answer) => !answer || typeof answer.itemId !== "string" || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(answer.itemId) || !/^[ABCD]$/.test(answer.option))
     )
       return Response.json({ error: "提交资料不完整。" }, { status: 400 });
     const supabase = getAdminClient();
-    const { data: quiz } = await supabase
-      .from("practice_quizzes")
-      .select("id,status")
-      .eq("id", quizId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (!quiz)
-      return Response.json({ error: "找不到这次练习。" }, { status: 404 });
-    if (quiz.status === "submitted")
-      return Response.json({ error: "这次练习已经提交。" }, { status: 409 });
-    const { data: rawItems, error } = await supabase
-      .from("practice_items")
-      .select("id, questions(correct_option)")
-      .eq("quiz_id", quizId);
-    const items = rawItems as any[] | null;
-    if (error || !items || items.length !== 20)
-      throw error || new Error("Practice items missing");
-    const choice = new Map(
-      answers.map((answer) => [answer.itemId, answer.option]),
-    );
-    if (choice.size !== 20 || items.some((item) => !choice.has(item.id)))
-      return Response.json({ error: "答案与题目不一致。" }, { status: 400 });
-    const correct = items.reduce(
-      (score: number, item: any) =>
-        score +
-        (choice.get(item.id) ===
-        firstRelation<any>(item.questions)?.correct_option
-          ? 1
-          : 0),
-      0,
-    );
-    const { data: updatedItems, error: answerUpdateError } = await supabase.rpc(
-      "set_practice_quiz_item_answers",
+    const { data: result, error } = await supabase.rpc(
+      "submit_quiz_attempt",
       {
+        p_kind: "practice",
+        p_user_id: user.id,
         p_quiz_id: quizId,
         p_answers: answers.map(({ itemId, option }) => ({
           id: itemId,
@@ -182,24 +154,15 @@ export async function PATCH(request: Request) {
         })),
       },
     );
-    if (answerUpdateError || updatedItems !== 20)
-      throw answerUpdateError || new Error("Practice answer update was incomplete");
-    const { error: updateError } = await supabase
-      .from("practice_quizzes")
-      .update({
-        status: "submitted",
-        correct_count: correct,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("id", quizId)
-      .eq("status", "active");
-    if (updateError) throw updateError;
+    if (error) throw error;
+    if (result.error)
+      return Response.json({ error: result.error }, { status: result.status });
     after(() =>
       syncGoogleSheetSnapshot().catch((syncError) =>
         console.error("Google Sheet practice sync failed", syncError),
       ),
     );
-    return Response.json({ correct });
+    return Response.json({ correct: result.correct });
   } catch (error) {
     return apiError(error);
   }

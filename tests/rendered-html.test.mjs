@@ -39,9 +39,9 @@ test("keeps the daily task, practice history, and ranking safeguards in source",
   ]);
 
   assert.match(daily, /quiz\.status\s*===\s*"submitted"[\s\S]{0,100}?question\.correct_option/);
-  assert.match(daily, /至少需要 20 道/);
+  assert.match(daily, /"start_quiz_attempt"/);
   assert.match(practice, /from\("practice_quizzes"\)/);
-  assert.match(practice, /from\("practice_items"\)/);
+  assert.match(practice, /"start_quiz_attempt"/);
   assert.match(practice, /"submit_quiz_attempt"/);
   assert.match(migration, /alter table public\.practice_quizzes enable row level security/);
   assert.match(migration, /alter table public\.practice_items enable row level security/);
@@ -69,8 +69,8 @@ test("keeps production-scale pagination, mobile access, streak, and security saf
 
   assert.match(subjects, /\.range\(/);
   assert.doesNotMatch(subjects, /\.limit\(1000\)/);
-  assert.match(daily, /listPublishedQuestionIds/);
-  assert.match(practice, /listPublishedQuestionIds/);
+  assert.match(daily, /start_quiz_attempt/);
+  assert.match(practice, /start_quiz_attempt/);
   assert.doesNotMatch(`${daily}\n${practice}`, /\.limit\(200\)/);
   assert.match(questions, /count:\s*"exact"/);
   assert.match(questions, /pageSize/);

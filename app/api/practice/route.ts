@@ -1,13 +1,11 @@
 import {
   apiError,
   getAdminClient,
-  malaysiaDate,
   requireStudentNickname,
 } from "@/lib/supabase-server";
 import { after } from "next/server";
 import { syncGoogleSheetSnapshot } from "@/lib/google-sheets-sync";
 import { signedQuestionImageUrls } from "@/lib/question-images";
-import { listPublishedQuestionIds, sampleQuestionIds } from "@/lib/question-bank-query";
 
 const options = (q: Record<string, string | null>) => [
   q.option_a,
@@ -91,36 +89,12 @@ export async function POST(request: Request) {
     if (typeof subject !== "string" || !subject.trim())
       return Response.json({ error: "请选择科目。" }, { status: 400 });
     const supabase = getAdminClient();
-    const bank = await listPublishedQuestionIds(subject.trim());
-    if (bank.length < 20)
-      return Response.json(
-        {
-          error: `「${subject.trim()}」目前只有 ${bank.length} 道已发布题目，至少需要 20 道。`,
-        },
-        { status: 422 },
-      );
-    const questionIds = sampleQuestionIds(bank, 20);
-    const { data: quiz, error: createError } = await supabase
-      .from("practice_quizzes")
-      .insert({
-        user_id: user.id,
-        local_date: malaysiaDate(),
-        subject: subject.trim(),
-      })
-      .select("id")
-      .single();
-    if (createError) throw createError;
-    const { error: itemError } = await supabase
-      .from("practice_items")
-      .insert(
-        questionIds.map((question_id, index) => ({
-          quiz_id: quiz.id,
-          question_id,
-          ordinal: index + 1,
-        })),
-      );
-    if (itemError) throw itemError;
-    return Response.json({ id: quiz.id }, { status: 201 });
+    const { data: result, error } = await supabase.rpc("start_quiz_attempt", {
+      p_kind: "practice", p_user_id: user.id, p_subject: subject.trim(),
+    });
+    if (error) throw error;
+    if (result.error) return Response.json({ error: result.error }, { status: result.status });
+    return Response.json({ id: result.id, existing: result.existing }, { status: result.existing ? 200 : 201 });
   } catch (error) {
     return apiError(error);
   }

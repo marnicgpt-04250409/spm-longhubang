@@ -67,6 +67,29 @@ test("publication rejects missing diagrams and placeholder options while permitt
 });
 
 for (const route of ["daily", "practice"]) {
+  test(`${route} start uses verified ownership and preserves resumed attempts`, async () => {
+    const handler = await loadModule(`../app/api/${route}/route.ts`, `
+      export const calls = [];
+      export let outcome = {id: "reserved-quiz", existing: false};
+      export function setOutcome(value) { outcome = value; }
+      const requireStudentNickname = async () => ({id: "verified-student"});
+      const apiError = (error) => { throw error; };
+      const getAdminClient = () => ({rpc: async (name, args) => {
+        calls.push({name, args}); return {data: outcome, error: null};
+      }});
+    `);
+    const start = subject => handler.POST(new Request("https://example.test", {method: "POST",body: JSON.stringify({subject,userId: "forged"})}));
+    assert.equal((await start(" Biologi ")).status, 201);
+    assert.deepEqual(handler.calls[0], {name: "start_quiz_attempt",args: {p_kind: route,p_user_id: "verified-student",p_subject: "Biologi"}});
+    handler.setOutcome({id: "reserved-quiz",existing: true});
+    const resumed = await start("Biologi");
+    assert.equal(resumed.status, 200);
+    assert.equal((await resumed.json()).id, "reserved-quiz");
+    handler.setOutcome({error: "Insufficient questions",status: 422});
+    assert.equal((await start("Biologi")).status, 422);
+    assert.equal((await start("")).status, 400);
+    assert.equal(handler.calls.length, 3);
+  });
   test(`${route} submission delegates ownership and scoring to the atomic transaction`, async () => {
     const quizId = "10000000-0000-4000-8000-000000000000";
     const answers = Array.from({length: 20}, (_, i) => ({

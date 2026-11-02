@@ -18,6 +18,7 @@ const columnAliases: Record<string, string[]> = {
   imageAlt: ["图片说明（可选）", "图片说明", "image alt", "alt text"],
 };
 type ImportedQuestion = {
+  rowNumber: number;
   subject: string; prompt: string; optionA: string; optionB: string; optionC: string; optionD: string;
   correctOption: "A" | "B" | "C" | "D"; explanation: string | null; difficulty: "基础" | "中等" | "进阶" | null; topic: string | null; contentHash: string; imagePath: string | null; imageAlt: string | null;
 };
@@ -100,13 +101,13 @@ export async function POST(request: Request) {
       if (topic && topic.length > 120) { rejected.push({ row: rowNumber, reason: "章节／主题不能超过 120 个字符。" }); continue; }
       const hash = await contentHash([subject, prompt, optionA, optionB, optionC, optionD]);
       if (seen.has(hash)) { rejected.push({ row: rowNumber, reason: "与本表较早的题目重复。" }); continue; }
-      seen.add(hash);
       const imageFilename = getValue(row, "imageFilename");
       const imagePath = imageFilename ? imageByName.get(imageFilename.toLocaleLowerCase()) || null : null;
       if (imageFilename && !imagePath) { rejected.push({ row: rowNumber, reason: `找不到图片文件：${imageFilename}` }); continue; }
       const imageAlt = getValue(row, "imageAlt") || null;
       if (imageAlt && imageAlt.length > 300) { rejected.push({ row: rowNumber, reason: "图片说明不能超过 300 个字符。" }); continue; }
-      accepted.push({ subject, prompt, optionA, optionB, optionC, optionD, correctOption: answer as ImportedQuestion["correctOption"], explanation: getValue(row, "explanation") || null, difficulty, topic, contentHash: hash, imagePath, imageAlt });
+      seen.add(hash);
+      accepted.push({ rowNumber, subject, prompt, optionA, optionB, optionC, optionD, correctOption: answer as ImportedQuestion["correctOption"], explanation: getValue(row, "explanation") || null, difficulty, topic, contentHash: hash, imagePath, imageAlt });
     }
     const supabase = getAdminClient();
     const existingHashes = new Set<string>();
@@ -119,7 +120,7 @@ export async function POST(request: Request) {
       for (const item of existing ?? []) existingHashes.add(item.content_hash);
     }
     const newQuestions = accepted.filter((item) => !existingHashes.has(item.contentHash));
-    for (const [index, item] of accepted.entries()) if (existingHashes.has(item.contentHash)) rejected.push({ row: index + 2, reason: "题库中已有相同题目。" });
+    for (const item of accepted) if (existingHashes.has(item.contentHash)) rejected.push({ row: item.rowNumber, reason: "题库中已有相同题目。" });
     if (!newQuestions.length) {
       if (uploadedImagePaths.length) await supabase.storage.from(QUESTION_IMAGE_BUCKET).remove(uploadedImagePaths);
       uploadedImagePaths = [];

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SCHOOL_OPTIONS, schoolSelectValue } from "@/lib/schools";
 import { getBrowserClient } from "@/lib/supabase-browser";
 
@@ -15,6 +15,11 @@ type Question = {
   itemId?: string;
   imageUrl?: string;
   imageAlt?: string;
+};
+type QuestionEditorDraft = {
+  id: string; subject: string; topic: string; prompt: string;
+  optionA: string; optionB: string; optionC: string; optionD: string;
+  correctOption: string; explanation: string;
 };
 const Logo = () => (
   <div className="logo">
@@ -112,6 +117,19 @@ export default function Home() {
   const [rankRows, setRankRows] = useState<string[][]>([]);
   const [teacherUploads, setTeacherUploads] = useState<any[]>([]);
   const [teacherQuestions, setTeacherQuestions] = useState<any[]>([]);
+  const [questionEditor, setQuestionEditor] = useState<QuestionEditorDraft | null>(null);
+  const [questionEditorSaving, setQuestionEditorSaving] = useState(false);
+  const [questionEditorError, setQuestionEditorError] = useState("");
+  const [teacherInviteOpen, setTeacherInviteOpen] = useState(false);
+  const [teacherInviteDraft, setTeacherInviteDraft] = useState("");
+  const [teacherInviteError, setTeacherInviteError] = useState("");
+  const [teacherInviteSaving, setTeacherInviteSaving] = useState(false);
+  const [pdfSubject, setPdfSubject] = useState("");
+  const [pendingBatchAction, setPendingBatchAction] = useState<"batch-publish" | "batch-delete" | null>(null);
+  const [batchReviewBusy, setBatchReviewBusy] = useState(false);
+  const [batchReviewError, setBatchReviewError] = useState("");
+  const editorSubjectRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (questionEditor?.id) editorSubjectRef.current?.focus(); }, [questionEditor?.id]);
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
   const [subjectList, setSubjectList] = useState<string[]>([]);
   const [quizMode, setQuizMode] = useState<"daily" | "practice">("daily");
@@ -329,25 +347,32 @@ export default function Home() {
       setMessage(error instanceof Error ? error.message : "Google Sheet 同步失败");
     }
   }
-  async function verifyTeacher() {
+  function verifyTeacher() {
+    setTeacherInviteError("");
+    setTeacherInviteOpen(true);
+  }
+  async function submitTeacherInvitation() {
+    if (teacherInviteSaving || !teacherInviteDraft.trim()) return;
+    setTeacherInviteSaving(true);
     try {
-      const inviteCode = window.prompt("请输入教师邀请码");
-      if (!inviteCode) return;
       await callApi("/api/teacher/verify", {
         method: "POST",
-        body: JSON.stringify({ inviteCode }),
+        body: JSON.stringify({ inviteCode: teacherInviteDraft.trim() }),
       });
       setTeacher(true);
+      setTeacherInviteOpen(false);
+      setTeacherInviteDraft("");
       setMessage("教师权限已启用。");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "验证失败");
+      setTeacherInviteError(error instanceof Error ? error.message : "验证失败");
+    } finally {
+      setTeacherInviteSaving(false);
     }
   }
   async function uploadPdf(file: File) {
     try {
       if (!session?.access_token) throw new Error("请先使用 Google 登录。");
-      const subject =
-        window.prompt("请输入这份试卷的科目，例如 Matematik") || "";
+      const subject = pdfSubject.trim();
       if (!subject.trim()) throw new Error("请填写科目后再上传。");
       setMessage("正在安全上传 PDF，请勿关闭此页面…");
       const headers = {
@@ -540,64 +565,13 @@ export default function Home() {
       setMessage(error instanceof Error ? error.message : "无法读取教师资料");
     }
   }
-  async function createManualQuestion() {
-    try {
-      const subject = window.prompt("科目")?.trim();
-      const topic = window.prompt("章节／主题（可留空）")?.trim();
-      const prompt = window.prompt("题干")?.trim();
-      const optionA = window.prompt("A 选项")?.trim();
-      const optionB = window.prompt("B 选项")?.trim();
-      const optionC = window.prompt("C 选项")?.trim();
-      const optionD = window.prompt("D 选项")?.trim();
-      const correctOption = window
-        .prompt("正确答案（A / B / C / D）")
-        ?.trim()
-        .toUpperCase();
-      if (
-        !subject ||
-        !prompt ||
-        !optionA ||
-        !optionB ||
-        !optionC ||
-        !optionD ||
-        !correctOption
-      )
-        return;
-      await callApi("/api/teacher/questions", {
-        method: "POST",
-        body: JSON.stringify({
-          subject,
-          topic,
-          prompt,
-          optionA,
-          optionB,
-          optionC,
-          optionD,
-          correctOption,
-        }),
-      });
-      setMessage("题目草稿已建立。审核后点击发布。 ");
-      await loadTeacherData();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "无法建立题目");
-    }
+  function createManualQuestion() {
+    setQuestionEditorError("");
+    setQuestionEditor({id:"new",subject:teacherQuestionSubject === "all" ? "" : teacherQuestionSubject,topic:"",prompt:"",optionA:"",optionB:"",optionC:"",optionD:"",correctOption:"",explanation:""});
   }
-  async function confirmAnswer(id: string) {
-    try {
-      const correctOption = window
-        .prompt("确认正确答案（A / B / C / D）")
-        ?.trim()
-        .toUpperCase();
-      if (!correctOption) return;
-      await callApi("/api/teacher/questions", {
-        method: "PATCH",
-        body: JSON.stringify({ id, correctOption }),
-      });
-      setMessage("正确答案已确认，现在可以发布。");
-      await loadTeacherData();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "答案确认失败");
-    }
+  function confirmAnswer(id: string) {
+    const item = teacherQuestions.find(question=>question.id === id);
+    if (item) editQuestion(item);
   }
   async function publishQuestion(id: string) {
     try {
@@ -622,16 +596,23 @@ export default function Home() {
         : [...current, id],
     );
   }
-  async function batchReview(action: "batch-publish" | "batch-delete") {
+  function batchReview(action: "batch-publish" | "batch-delete") {
     if (!selectedQuestionIds.length) return;
+    setBatchReviewError("");
+    setPendingBatchAction(action);
+  }
+  async function executeBatchReview() {
+    if (!pendingBatchAction || batchReviewBusy) return;
+    const action = pendingBatchAction;
     const label = action === "batch-publish" ? "发布" : "删除";
-    if (!window.confirm(`确定要${label}已选的 ${selectedQuestionIds.length} 道题目吗？`)) return;
+    setBatchReviewBusy(true);
     try {
       const data = await callApi("/api/teacher/questions", {
         method: "PATCH",
         body: JSON.stringify({ action, ids: selectedQuestionIds }),
       });
       setSelectedQuestionIds([]);
+      setPendingBatchAction(null);
       setMessage(
         action === "batch-publish"
           ? `已批量发布 ${data.published} 道题目。`
@@ -639,53 +620,41 @@ export default function Home() {
       );
       await Promise.all([loadTeacherData(), loadSubjects()]);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : `批量${label}失败`);
+      setBatchReviewError(error instanceof Error ? error.message : `批量${label}失败`);
+    } finally {
+      setBatchReviewBusy(false);
     }
   }
-  async function editQuestion(item: any) {
+  function editQuestion(item: any) {
+    setQuestionEditorError("");
+    setQuestionEditor({id: item.id, subject: item.subject || "", topic: item.topic || "", prompt: item.prompt || "",
+      optionA: item.option_a || "", optionB: item.option_b || "", optionC: item.option_c || "", optionD: item.option_d || "",
+      correctOption: item.answer_confirmed ? item.correct_option || "" : "", explanation: item.explanation || ""});
+  }
+  function updateQuestionEditor(field: Exclude<keyof QuestionEditorDraft, "id">, value: string) {
+    setQuestionEditor(current => current ? {...current, [field]: value} : current);
+  }
+  async function saveQuestionEditor() {
+    if (!questionEditor || questionEditorSaving) return;
+    const draft = questionEditor;
     try {
-      const subject = window.prompt("科目", item.subject);
-      const topic = window.prompt("章节／主题（可留空）", item.topic || "");
-      const prompt = window.prompt("题干", item.prompt);
-      const optionA = window.prompt("A 选项", item.option_a || "");
-      const optionB = window.prompt("B 选项", item.option_b || "");
-      const optionC = window.prompt("C 选项", item.option_c || "");
-      const optionD = window.prompt("D 选项", item.option_d || "");
-      const correctOption = window.prompt("正确答案（A/B/C/D）", item.correct_option || "");
-      const explanation = window.prompt(
-        "解析（可留空）",
-        item.explanation || "",
-      );
-      if (
-        [subject, prompt, optionA, optionB, optionC, optionD].some(
-          (value) => !value?.trim(),
-        )
-      )
-        return;
-      if (correctOption === null) return;
-      if (!/^[ABCD]$/.test(correctOption.trim().toUpperCase())) {
-        setMessage("正确答案必须是 A、B、C 或 D。");
+      if ([draft.subject, draft.prompt, draft.optionA, draft.optionB, draft.optionC, draft.optionD].some(value=>!value.trim()) || !/^[ABCD]$/.test(draft.correctOption)) {
+        setQuestionEditorError("请填写科目、题干、四个选项及唯一正确答案。");
         return;
       }
+      setQuestionEditorSaving(true);
+      setQuestionEditorError("");
       await callApi("/api/teacher/questions", {
-        method: "PATCH",
-        body: JSON.stringify({
-          id: item.id,
-          subject,
-          topic: topic || "",
-          prompt,
-          optionA,
-          optionB,
-          optionC,
-          optionD,
-          correctOption: correctOption.trim().toUpperCase(),
-          explanation: explanation || "",
-        }),
+        method: draft.id === "new" ? "POST" : "PATCH",
+        body: JSON.stringify(draft),
       });
+      setQuestionEditor(null);
       setMessage("题目内容已更新。");
       await loadTeacherData();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "题目编辑失败");
+      setQuestionEditorError(error instanceof Error ? error.message : "题目编辑失败");
+    } finally {
+      setQuestionEditorSaving(false);
     }
   }
   useEffect(() => {
@@ -910,6 +879,45 @@ export default function Home() {
           {message}
           <button onClick={() => setMessage("")}>×</button>
         </div>
+      )}
+      {questionEditor && (
+        <section className="nickname-overlay question-editor-overlay" role="dialog" aria-modal="true" aria-labelledby="question-editor-title">
+          <form className="nickname-card question-editor" onSubmit={event=>{event.preventDefault();saveQuestionEditor();}}>
+            <p className="eyebrow">QUESTION REVIEW</p>
+            <h1 id="question-editor-title">{questionEditor.id === "new" ? "新增题目" : "编辑题目"}</h1>
+            <div className="editor-fields">
+              <label><span>科目</span><input ref={editorSubjectRef} value={questionEditor.subject} onChange={event=>updateQuestionEditor("subject",event.target.value)} required disabled={questionEditorSaving}/></label>
+              <label><span>章节／主题</span><input value={questionEditor.topic} onChange={event=>updateQuestionEditor("topic",event.target.value)} maxLength={120} disabled={questionEditorSaving}/></label>
+              <label className="editor-wide"><span>题干</span><textarea rows={4} value={questionEditor.prompt} onChange={event=>updateQuestionEditor("prompt",event.target.value)} required disabled={questionEditorSaving}/></label>
+              {(["optionA","optionB","optionC","optionD"] as const).map((field,index)=><label key={field}><span>{"ABCD"[index]} 选项</span><textarea rows={2} value={questionEditor[field]} onChange={event=>updateQuestionEditor(field,event.target.value)} required disabled={questionEditorSaving}/></label>)}
+              <label><span>正确答案</span><select value={questionEditor.correctOption} onChange={event=>updateQuestionEditor("correctOption",event.target.value)} required disabled={questionEditorSaving}><option value="" disabled>请选择答案</option>{["A","B","C","D"].map(option=><option key={option} value={option}>{option}</option>)}</select></label>
+              <label className="editor-wide"><span>解析</span><textarea rows={3} value={questionEditor.explanation} onChange={event=>updateQuestionEditor("explanation",event.target.value)} disabled={questionEditorSaving}/></label>
+            </div>
+            {questionEditorError && <p className="editor-error" role="alert">{questionEditorError}</p>}
+            <div className="editor-actions"><button className="secondary" type="button" disabled={questionEditorSaving} onClick={()=>setQuestionEditor(null)}>取消编辑</button><button className="primary" type="submit" disabled={questionEditorSaving}>{questionEditorSaving ? "保存中…" : "保存题目"}</button></div>
+          </form>
+        </section>
+      )}
+      {teacherInviteOpen && (
+        <section className="nickname-overlay" role="dialog" aria-modal="true" aria-labelledby="teacher-invite-title">
+          <form className="nickname-card" onSubmit={event=>{event.preventDefault();submitTeacherInvitation();}}>
+            <h1 id="teacher-invite-title">验证教师身份</h1>
+            <label className="school-field"><span>教师邀请码</span><input type="password" value={teacherInviteDraft} onChange={event=>setTeacherInviteDraft(event.target.value)} required disabled={teacherInviteSaving} autoComplete="off"/></label>
+            {teacherInviteError && <p role="alert">{teacherInviteError}</p>}
+            <button className="primary" type="submit" disabled={teacherInviteSaving}>{teacherInviteSaving ? "验证中…" : "验证邀请码"}</button>
+            <button className="link nickname-close" type="button" disabled={teacherInviteSaving} onClick={()=>{setTeacherInviteOpen(false);setTeacherInviteDraft("");}}>取消</button>
+          </form>
+        </section>
+      )}
+      {pendingBatchAction && (
+        <section className="nickname-overlay" role="dialog" aria-modal="true" aria-labelledby="batch-confirm-title">
+          <div className="nickname-card">
+            <h1 id="batch-confirm-title">确认批量{pendingBatchAction === "batch-publish" ? "发布" : "删除"}</h1>
+            <p>已选择 {selectedQuestionIds.length} 道题目。{pendingBatchAction === "batch-publish" ? "发布后会进入学生对应科目的题库。" : "只会删除选中的待审核草稿。"}</p>
+            {batchReviewError && <p role="alert">{batchReviewError}</p>}
+            <div className="editor-actions"><button className="secondary" disabled={batchReviewBusy} onClick={()=>setPendingBatchAction(null)}>取消操作</button><button className="primary" disabled={batchReviewBusy} onClick={executeBatchReview}>{batchReviewBusy ? "处理中…" : "确认操作"}</button></div>
+          </div>
+        </section>
       )}
       {tab === "home" && (
         <section className="wrap home">
@@ -1446,6 +1454,8 @@ export default function Home() {
                   支持文字型 PDF ·
                   上传后会安全保存为待审核资料，题目必须人工审核、填写答案后才可发布。
                 </p>
+                <label className="school-field pdf-subject-field"><span>试卷科目</span><input list="teacher-pdf-subjects" value={pdfSubject} onChange={event=>setPdfSubject(event.target.value)} placeholder="例如：Matematik" maxLength={80}/></label>
+                <datalist id="teacher-pdf-subjects">{subjectList.map(subject=><option key={subject} value={subject}/>)}</datalist>
                 <label className="secondary">
                   选择 PDF 文件
                   <input
@@ -1454,6 +1464,7 @@ export default function Home() {
                     hidden
                     onChange={(event) => {
                       const file = event.target.files?.[0];
+                      event.currentTarget.value = "";
                       if (file) uploadPdf(file);
                     }}
                   />

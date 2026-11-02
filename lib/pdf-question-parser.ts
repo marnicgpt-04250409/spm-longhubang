@@ -1,3 +1,6 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
 export type ExtractedQuestion = {
   prompt: string;
   optionA: string;
@@ -11,7 +14,9 @@ const clean = (value: string) => value.replace(/\s+/g, " ").trim();
 /** Extracts only clearly structured ABCD questions. Ambiguous PDF text stays in review. */
 export async function extractAbcdQuestions(pdf: ArrayBuffer): Promise<ExtractedQuestion[]> {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  const packageRoot = path.dirname(createRequire(import.meta.url).resolve("pdfjs-dist/package.json"));
+  // Webpack rewrites require.resolve(package.json) to a numeric module ID.
+  // Runtime assets are traced into node_modules under the function root.
+  const packageRoot = path.join(process.cwd(), "node_modules", "pdfjs-dist");
   pdfjs.GlobalWorkerOptions.workerSrc = pathToFileURL(path.join(packageRoot, "legacy/build/pdf.worker.mjs")).href;
   const document = await pdfjs.getDocument({ data: new Uint8Array(pdf),
     standardFontDataUrl: path.join(packageRoot, "standard_fonts") + path.sep,
@@ -40,7 +45,4 @@ export async function extractAbcdQuestions(pdf: ArrayBuffer): Promise<ExtractedQ
     await document.destroy();
   }
 }
-import { createRequire } from "node:module";
-import path from "node:path";
-import { pathToFileURL } from "node:url";
 

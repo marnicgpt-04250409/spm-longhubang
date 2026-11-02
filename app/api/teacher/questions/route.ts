@@ -21,7 +21,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("questions")
       .select(
-        "id,subject,topic,prompt,option_a,option_b,option_c,option_d,explanation,status,answer_confirmed,source_type,source_label,difficulty,image_path,image_alt,created_at,uploads(filename)",
+        "id,subject,topic,prompt,option_a,option_b,option_c,option_d,correct_option,explanation,status,answer_confirmed,source_type,source_label,difficulty,image_path,image_alt,created_at,uploads(filename)",
         { count: "exact" },
       )
       .eq("author_id", user.id)
@@ -212,7 +212,12 @@ export async function PATCH(request: Request) {
       topic,
     };
     if (Object.values(editable).some((value) => value !== undefined)) {
-      const update: Record<string, string | null> = {};
+      const update: Record<string, string | boolean | null> = {};
+      if (correctOption !== undefined) {
+        if (!validOption(correctOption)) return Response.json({error: "正确答案必须是 A、B、C 或 D。"}, {status: 400});
+        update.correct_option = correctOption;
+        update.answer_confirmed = true;
+      }
       const pairs = [
         ["subject", subject],
         ["prompt", prompt],
@@ -239,6 +244,17 @@ export async function PATCH(request: Request) {
         if (typeof topic !== "string" || topic.trim().length > 120)
           return Response.json({ error: "章节／主题不能超过 120 个字符。" }, { status: 400 });
         update.topic = topic.trim() || null;
+      }
+      const {data: current, error: currentError} = await supabase.from("questions")
+        .select("status,prompt,option_a,option_b,option_c,option_d,image_path")
+        .eq("id", id).eq("author_id", user.id).maybeSingle();
+      if (currentError) throw currentError;
+      if (!current) return Response.json({error: "找不到这道题目。"}, {status: 404});
+      if (current.status === "published") {
+        const issue = questionPublicationIssue({...current, ...update});
+        if (issue) return Response.json({error: issue}, {status: 400});
+        if (current.image_path && !(await signedQuestionImageUrls([current.image_path])).has(current.image_path))
+          return Response.json({error: "题目图片无法读取，请修复图片后再保存。"}, {status: 400});
       }
       const { data, error } = await supabase
         .from("questions")

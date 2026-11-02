@@ -651,6 +651,7 @@ export default function Home() {
       const optionB = window.prompt("B 选项", item.option_b || "");
       const optionC = window.prompt("C 选项", item.option_c || "");
       const optionD = window.prompt("D 选项", item.option_d || "");
+      const correctOption = window.prompt("正确答案（A/B/C/D）", item.correct_option || "");
       const explanation = window.prompt(
         "解析（可留空）",
         item.explanation || "",
@@ -661,6 +662,11 @@ export default function Home() {
         )
       )
         return;
+      if (correctOption === null) return;
+      if (!/^[ABCD]$/.test(correctOption.trim().toUpperCase())) {
+        setMessage("正确答案必须是 A、B、C 或 D。");
+        return;
+      }
       await callApi("/api/teacher/questions", {
         method: "PATCH",
         body: JSON.stringify({
@@ -672,6 +678,7 @@ export default function Home() {
           optionB,
           optionC,
           optionD,
+          correctOption: correctOption.trim().toUpperCase(),
           explanation: explanation || "",
         }),
       });
@@ -1613,7 +1620,7 @@ export default function Home() {
                         <b>{item.prompt}</b>
                         <small>
                           {item.source_label || item.uploads?.filename || "手动建立"} ·{" "}
-                          {item.topic ? `${item.topic} · ` : ""}{item.answer_confirmed ? "答案已确认" : "需确认答案"}
+                          {item.topic ? `${item.topic} · ` : ""}{item.answer_confirmed ? `正确答案：${item.correct_option || "未填写"}` : "需确认答案"}
                         </small>
                       </span>
                       <em

@@ -1,4 +1,10 @@
 import { apiError, effectiveStreakDays, getAdminClient, malaysiaDate, requireUser } from "@/lib/supabase-server";
+import { readAllPages } from "@/lib/pagination";
+
+type Profile = { nickname: string | null; school_name: string | null };
+type Score = { user_id: string; correct_count: number | null; completed_at: string | null; subject: string; profiles: Profile | Profile[] };
+type Streak = { id: string; nickname: string | null; streak_days: number; last_checkin_date: string | null };
+const firstProfile = (value: Score["profiles"]) => Array.isArray(value) ? value[0] : value;
 
 export async function GET(request: Request) {
   try {
@@ -12,14 +18,18 @@ export async function GET(request: Request) {
       ? { "Cache-Control": "private, no-store" }
       : { "Cache-Control": "public, s-maxage=10, stale-while-revalidate=30" };
     if (kind === "streak") {
-      const { data, error } = await supabase
+      const yesterday = malaysiaDate(new Date(Date.now() - 24 * 60 * 60 * 1000));
+      const data = await readAllPages<Streak>((page, size) => supabase
         .from("profiles")
         .select("id,nickname,streak_days,last_checkin_date")
         .eq("role", "student")
+        .gte("last_checkin_date", yesterday)
+        .lte("last_checkin_date", malaysiaDate())
+        .gt("streak_days", 0)
         .order("streak_days", { ascending: false })
         .order("last_checkin_date", { ascending: false })
-        .limit(100);
-      if (error) throw error;
+        .order("id")
+        .range(page * size, (page + 1) * size - 1));
       const activeEntries = (data ?? [])
         .map((entry) => ({
           ...entry,
@@ -37,29 +47,26 @@ export async function GET(request: Request) {
       const mine = viewer
         ? entries.find((entry) => entry.id === viewer.id) ?? null
         : null;
-      return Response.json({ date: malaysiaDate(), entries, mine }, { headers });
+      return Response.json({ date: malaysiaDate(), entries: entries.slice(0, 100), mine }, { headers });
     }
     const subject = searchParams.get("subject");
-    let query = supabase
+    const scores = await readAllPages<Score>((page, size) => {
+      let query = supabase
       .from("daily_quizzes")
-      .select("user_id,correct_count,completed_at,subject")
+      .select("user_id,correct_count,completed_at,subject,profiles!inner(nickname,school_name,role)")
       .eq("local_date", malaysiaDate())
       .eq("status", "submitted")
+      .eq("profiles.role", "student")
       .order("correct_count", { ascending: false })
       .order("completed_at", { ascending: true })
-      .limit(100);
-    if (subject) query = query.eq("subject", subject);
-    const { data: scores, error } = await query;
-    if (error) throw error;
-    const ids = [...new Set((scores ?? []).map((s) => s.user_id))];
-    const { data: profiles } = ids.length
-      ? await supabase.from("profiles").select("id,nickname,school_name,role").in("id", ids).eq("role", "student")
-      : { data: [] };
+      .order("id");
+      if (subject) query = query.eq("subject", subject);
+      return query.range(page * size, (page + 1) * size - 1);
+    });
     if (kind === "school") {
       const schoolScores = new Map<string, { school: string; total: number; participants: number }>();
-      const profileById = new Map((profiles ?? []).map((profile) => [profile.id, profile]));
       for (const score of scores ?? []) {
-        const school = profileById.get(score.user_id)?.school_name?.trim();
+        const school = firstProfile(score.profiles)?.school_name?.trim();
         if (!school) continue;
         const entry = schoolScores.get(school) ?? { school, total: 0, participants: 0 };
         entry.total += score.correct_count ?? 0;
@@ -78,7 +85,6 @@ export async function GET(request: Request) {
         });
       return Response.json({ date: malaysiaDate(), entries, mine: null }, { headers });
     }
-    const names = new Map((profiles ?? []).map((p) => [p.id, p.nickname || "未填姓名"]));
     let previousScore: number | null = null;
     let rank = 0;
     const entries = (scores ?? []).map((score, index) => {
@@ -86,7 +92,7 @@ export async function GET(request: Request) {
       previousScore = score.correct_count;
       return {
         rank,
-        name: names.get(score.user_id) ?? "SPM 学生",
+        name: firstProfile(score.profiles)?.nickname || "未填姓名",
         score: score.correct_count,
         completedAt: score.completed_at,
         subject: score.subject,
@@ -96,7 +102,7 @@ export async function GET(request: Request) {
       ? (scores ?? []).findIndex((score) => score.user_id === viewer.id)
       : -1;
     const mine = mineIndex >= 0 ? entries[mineIndex] : null;
-    return Response.json({ date: malaysiaDate(), entries, mine }, { headers });
+    return Response.json({ date: malaysiaDate(), entries: entries.slice(0, 100), mine }, { headers });
   } catch (error) {
     return apiError(error);
   }

@@ -41,8 +41,9 @@ async function finishImport({
   let extracted: ExtractedQuestion[] = [];
   try {
     extracted = await extractAbcdQuestions(fileBytes);
-  } catch {
-    /* Text extraction failures remain an empty review import. */
+  } catch (error) {
+    console.error("PDF text extraction failed:", error instanceof Error ? error.message : "Unknown parser error");
+    /* Keep the source in review; the response explicitly reports no extraction. */
   }
   if (extracted.length && subject) {
     const { error: draftError } = await supabase.from("questions").insert(

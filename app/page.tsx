@@ -415,7 +415,7 @@ export default function Home() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "无法处理已上传的 PDF。");
-      setMessage(`${data.upload.filename} 已上传，现为待审核状态。`);
+      setMessage(data.message || `${data.upload.filename} 已上传，现为待审核状态。`);
       await loadTeacherData();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "上传失败");

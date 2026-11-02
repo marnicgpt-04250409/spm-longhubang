@@ -3,8 +3,6 @@ import {
   getAdminClient,
   requireStudentNickname,
 } from "@/lib/supabase-server";
-import { after } from "next/server";
-import { syncGoogleSheetSnapshot } from "@/lib/google-sheets-sync";
 import { signedQuestionImageUrls } from "@/lib/question-images";
 
 const options = (q: Record<string, string | null>) => [
@@ -131,11 +129,6 @@ export async function PATCH(request: Request) {
     if (error) throw error;
     if (result.error)
       return Response.json({ error: result.error }, { status: result.status });
-    after(() =>
-      syncGoogleSheetSnapshot().catch((syncError) =>
-        console.error("Google Sheet practice sync failed", syncError),
-      ),
-    );
     return Response.json({ correct: result.correct });
   } catch (error) {
     return apiError(error);

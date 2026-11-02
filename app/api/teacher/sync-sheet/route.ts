@@ -1,5 +1,7 @@
 import { apiError, requireBankManager } from "@/lib/supabase-server";
-import { syncGoogleSheetSnapshot } from "@/lib/google-sheets-sync";
+import { syncGoogleSheetSnapshot } from "@/lib/google-sheets-queue";
+
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   try {
@@ -7,6 +9,7 @@ export async function POST(request: Request) {
     const result = await syncGoogleSheetSnapshot();
     if (!result.configured)
       return Response.json({ error: "Google Sheet 自动同步尚未完成安全配置。" }, { status: 409 });
+    if (result.queued) return Response.json({message: "同步任务已排队，后台会自动更新 Google Sheet。"}, {status: 202});
     return Response.json({ message: `已同步 ${result.students} 位学生与 ${result.attempts} 条作答明细。` });
   } catch (error) {
     return apiError(error);

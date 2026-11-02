@@ -119,10 +119,10 @@ for (const route of ["daily", "practice"]) {
       p_kind: route, p_user_id: "verified-student", p_quiz_id: quizId,
       p_answers: answers.map(a => ({id: a.itemId, selected_option: a.option})),
     }});
-    assert.equal(handler.effects.length, 1);
+    assert.equal(handler.effects.length, 0, "submission must not run provider writes");
     handler.setOutcome({error: "Already submitted", status: 409});
     assert.equal((await submit({quizId, answers})).status, 409);
-    assert.equal(handler.effects.length, 1, "rejected retries must not sync the sheet");
+    assert.equal(handler.effects.length, 0, "rejected retries must not sync the sheet");
     for (const body of [{quizId, answers: [null, ...answers.slice(1)]}, {quizId: "invalid", answers}, {quizId, answers: answers.slice(1)}]) {
       assert.equal((await submit(body)).status, 400);
     }

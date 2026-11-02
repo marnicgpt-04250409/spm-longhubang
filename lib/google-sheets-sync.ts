@@ -59,7 +59,7 @@ export function isGoogleSheetSyncConfigured() {
  * Rebuilds today's private administrator workbook from the authoritative
  * Supabase records.  This makes retries safe and avoids duplicate rows.
  */
-export async function syncGoogleSheetSnapshot() {
+export async function writeGoogleSheetSnapshot() {
   const credentials = configuredCredentials();
   if (!credentials || !spreadsheetId) return { configured: false as const };
   const supabase = getAdminClient();
@@ -127,7 +127,7 @@ export async function syncGoogleSheetSnapshot() {
     credentials,
     scopes: ["https://www.googleapis.com/auth/spreadsheets"],
   });
-  const sheets = google.sheets({ version: "v4", auth });
+  const sheets = google.sheets({ version: "v4", auth, timeout: 15000, retry: false });
   const workbook = await sheets.spreadsheets.get({
     spreadsheetId,
     fields: "sheets.properties",

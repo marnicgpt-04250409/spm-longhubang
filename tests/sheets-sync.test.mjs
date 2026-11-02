@@ -41,8 +41,8 @@ test("sheet sync includes over 1000 students and quizzes, preserves zero scores 
       }};
       const google = {auth:{GoogleAuth:class {}},sheets:()=>sheetsApi};
     `;
-    const {syncGoogleSheetSnapshot,writes} = await load(pagination+stub+source);
-    const result = await syncGoogleSheetSnapshot();
+    const {writeGoogleSheetSnapshot,writes} = await load(pagination+stub+source);
+    const result = await writeGoogleSheetSnapshot();
     assert.equal(result.students,1500);
     assert.equal(result.attempts,30000);
     const resize = writes.find(w=>w.kind==="resize").request.requestBody.requests;

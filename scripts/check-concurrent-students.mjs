@@ -4,6 +4,7 @@ import {mkdir, writeFile, unlink} from "node:fs/promises";
 import {createClient} from "@supabase/supabase-js";
 
 const count = Number(process.argv[2] || 100);
+const httpSubmission = process.argv.includes("--http-submit");
 assert.ok(Number.isInteger(count) && count >= 1 && count <= 300);
 assert.equal(new URL(process.env.SUPABASE_URL).hostname, "yntycoemqtkawiuyplvz.supabase.co");
 const base = "https://spm-longhubang.vercel.app";
@@ -35,10 +36,10 @@ async function pool(rows, parallel, fn) {
   const failed = outcomes.find(result=>result.status === "rejected");
   if (failed) throw failed.reason;
 }
-async function api(user, path, method = "GET", body) {
+async function api(user, path, method = "GET", body, allowedStatus) {
   const response = await fetch(`${base}${path}`, {method,headers: {authorization: `Bearer ${user.token}`,"content-type":"application/json"},body: body ? JSON.stringify(body) : undefined,signal: AbortSignal.timeout(45000)});
   const data = await response.json();
-  if (!response.ok) throw new Error(`${method} ${path}: HTTP ${response.status} ${data.error || ""}`);
+  if (!response.ok && response.status !== allowedStatus) throw new Error(`${method} ${path}: HTTP ${response.status} ${data.error || ""}`);
   return data;
 }
 async function stage(name, fn) {
@@ -88,10 +89,12 @@ try {
     assert.ok(quiz.items.every(item=>item.question.subject===user.subject && item.question.correctOption===undefined));
     user.answers = quiz.items.map(item=>({id:item.id,selected_option:"A"}));
   });
-  // Exercise production database scoring without triggering Google Sheet writes.
-  // This is deliberately reported as RPC, not full HTTP submission capacity.
-  await stage("Database RPC submit",async user => {
-    const result = checked(await admin.rpc("submit_quiz_attempt",{p_kind:"daily",p_user_id:user.id,p_quiz_id:user.quizId,p_answers:user.answers}));
+  // RPC mode isolates database scoring. HTTP mode covers the server submission
+  // handler and its durable queue trigger; provider work stays asynchronous.
+  await stage(httpSubmission ? "HTTP submit daily" : "Database RPC submit",async user => {
+    const result = httpSubmission
+      ? await api(user,"/api/daily","PATCH",{quizId:user.quizId,answers:user.answers.map(answer=>({itemId:answer.id,option:answer.selected_option}))})
+      : checked(await admin.rpc("submit_quiz_attempt",{p_kind:"daily",p_user_id:user.id,p_quiz_id:user.quizId,p_answers:user.answers}));
     assert.equal(result.error,undefined);
     user.correct = result.correct;
     assert.equal(result.streak,1);
@@ -102,9 +105,14 @@ try {
     assert.equal(quiz.correct_count,user.correct);
     assert.equal(quiz.items.filter(item=>item.selectedOption===item.question.correctOption).length,user.correct);
   });
-  await stage("Database RPC duplicate rejection",async user => {
-    const result = checked(await admin.rpc("submit_quiz_attempt",{p_kind:"daily",p_user_id:user.id,p_quiz_id:user.quizId,p_answers:user.answers}));
-    assert.equal(result.status,409);
+  await stage(httpSubmission ? "HTTP duplicate rejection" : "Database RPC duplicate rejection",async user => {
+    if (httpSubmission) {
+      const result = await api(user,"/api/daily","PATCH",{quizId:user.quizId,answers:user.answers.map(answer=>({itemId:answer.id,option:answer.selected_option}))},409);
+      assert.equal(typeof result.error,"string");
+    } else {
+      const result = checked(await admin.rpc("submit_quiz_attempt",{p_kind:"daily",p_user_id:user.id,p_quiz_id:user.quizId,p_answers:user.answers}));
+      assert.equal(result.status,409);
+    }
   });
 } catch(error) {
   failure = String(error);
@@ -115,7 +123,7 @@ try {
   });
   if (!cleanupFailures.length) await unlink(recoveryPath).catch(()=>{});
   else await writeFile(recoveryPath,JSON.stringify(cleanupFailures));
-  const report = {run,date:new Date().toISOString(),students:users.length,completed: !failure && stages.length===5,failure,scope:"HTTP start/read/result; server-only database scoring RPC. Excludes OAuth UI, client rendering, Google Sheet sync and HTTP submission route.",stages,cleanup:{removed:users.length-cleanupFailures.length,failures:cleanupFailures}};
+  const report = {run,date:new Date().toISOString(),students:users.length,completed: !failure && stages.length===5,failure,scope:httpSubmission ? "HTTP start/read/submit/result/duplicate rejection, including durable Sheet queue triggers. Excludes OAuth UI, client rendering, sustained load and provider synchronization throughput." : "HTTP start/read/result; server-only database scoring RPC. Excludes OAuth UI, client rendering, Google Sheet sync and HTTP submission route.",stages,cleanup:{removed:users.length-cleanupFailures.length,failures:cleanupFailures}};
   await writeFile(`tmp/${run}-report.json`,JSON.stringify(report,null,2));
   console.log(JSON.stringify({report:`tmp/${run}-report.json`,cleanup:report.cleanup}));
   assert.equal(cleanupFailures.length,0,"Some generated accounts need cleanup");

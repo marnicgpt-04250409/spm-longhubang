@@ -30,21 +30,27 @@ The initial account-preparation attempt hit Auth HTTP 429 before exercising the 
 
 ## Remaining work and limits
 
-- 300-student capacity remains unverified. Run `capacity-1793594118288` is preparing accounts with paced logins; inspect its eventual report and cleanup rather than restarting it.
-- Sheet synchronization currently rebuilds the workbook for every successful submission. Concurrent writers, request quotas and retry behavior need further work before claiming full submission capacity.
-- Fixes for pagination beyond 1000 users/attempts, automatic worksheet expansion, and correct display of zero scores are deployed in `dpl_9eMcnpJas7L5pdh1hUQwXTJPT4cF` (READY). Provider writes still require live verification; mocked-provider tests are not live Sheet evidence.
+- Run `capacity-1793594118288` completed with 300 distinct students and zero failures in all five stages. All 300 accounts were deleted. P95: HTTP start 4169 ms; HTTP active questions 3657 ms; database scoring 1740 ms; HTTP results 3636 ms; duplicate rejection 1296 ms. Maximum HTTP result time was 5034 ms. Scope exclusions match the 100-student test above.
+- The durable queue worker is deployed in `dpl_2hsuyPv859qE9BM5rvgURAYn2T5A` (READY). Submission and profile changes increment a pending version in their database transaction. A minute-based database cron job calls the authenticated worker only when work is due. An exclusive 180-second lease and 60-second cooldown prevent overlapping snapshot writers; failed work remains pending with bounded backoff. Browser roles cannot read queue state or execute queue RPCs. Secrets are stored only in production environment variables and Supabase Vault.
+- Actual provider evidence: cron's first HTTP response was 200; the worker acknowledged version 5 after awaited Sheet writes. After HTTP test cleanup, requested and synced versions both reached 10 with zero failures at 04:52:02 UTC. The dashboard synchronization timestamp advanced to 12:52:01 Malaysia time; daily count 1 and correct total 17 matched database aggregates. Bounded searches of student-name rows found neither capacity-test nor HTTP-test accounts after that cleanup.
+- Live HTTP submission test: 20 simultaneous PATCH requests yielded one 200 and nineteen 409 responses in 1179 ms; score 13 and streak 1 matched stored results. A practice submission scored 13 without altering the daily score. Both submissions requested durable synchronization. The generated test account was removed successfully through Auth after the new profile trigger was installed.
+- Outstanding capacity scope: run `capacity-1793595204496` is currently preparing 300 accounts for HTTP submissions with the queue enabled. Follow its existing process/report instead of restarting it. OAuth browser login, client rendering and a sustained classroom-length test remain outside the measured scope. Temporary accounts may appear in the workbook during preparation; verify automatic resynchronization after their final cleanup.
+- Pagination beyond 1000 users/attempts, worksheet expansion and zero-score display have 1500-student/30000-item mocked-provider coverage. That large-volume provider payload has not been written to the real administrative workbook.
 - 24 legacy Biology questions and 9 Physics questions with missing diagrams/placeholders remain drafts. Restore only from verified original source files; do not fabricate missing diagrams.
 - GitHub upload is blocked by connector permission and unavailable CLI authentication. Production fixes were released through the authenticated Vercel deployment API; local commits preserve the source changes.
 - Database security advisor warns that leaked-password protection is disabled. The student UI uses Google login; no password configuration was changed.
 
 ## Repeatable verification
 
-- `npm test` — 18 tests currently pass, including actual route handlers and paginated Sheet mock-provider writes.
+- `npm test` — 21 tests currently pass, including actual route handlers, queue worker behavior and paginated Sheet mock-provider writes.
 - `npm run lint`
 - `npx next typegen` then `npx tsc --noEmit` — regenerate Next route types after the vinext build before type checking.
 - `node --env-file=.env.local scripts/smoke-production-quiz.mjs`
 - `node --env-file=.env.local scripts/verify-atomic-submission.mjs`
 - `node --env-file=.env.local scripts/verify-quiz-selection.mjs`
 - `node --env-file=.env.local scripts/check-concurrent-students.mjs 100`
+- `node --env-file=.env.local scripts/check-concurrent-students.mjs 300 --http-submit`
+- `node --env-file=.env.local scripts/verify-http-submission.mjs`
+- `tests/sheet-queue.sql` — live database state-machine assertions inside a transaction that rolls back; no provider calls.
 
 Capacity tests use temporary accounts and clean up only those accounts. Recovery manifests contain generated UUIDs only. Do not commit credentials or test access tokens.

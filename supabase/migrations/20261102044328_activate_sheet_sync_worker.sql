@@ -9,6 +9,12 @@ revoke all on all tables in schema net from public,anon,authenticated;
 grant usage on schema net to postgres;
 grant all on all tables in schema net to postgres;
 grant usage on all sequences in schema net to postgres;
+-- Auth-owned cascades also fire the profile-delete trigger. Give only the
+-- internal Auth database role enough access to mark the queue dirty.
+grant select,update on public.sheet_sync_state to supabase_auth_admin;
+grant execute on function public.request_sheet_sync() to supabase_auth_admin;
+create policy "auth service reads sync state" on public.sheet_sync_state for select to supabase_auth_admin using(singleton);
+create policy "auth service marks sync dirty" on public.sheet_sync_state for update to supabase_auth_admin using(singleton) with check(singleton);
 
 create function public.queue_completed_quiz_sheet_sync() returns trigger
 language plpgsql security invoker set search_path = '' as $$

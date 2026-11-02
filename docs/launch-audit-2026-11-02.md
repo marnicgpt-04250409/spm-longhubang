@@ -30,9 +30,9 @@ The initial account-preparation attempt hit Auth HTTP 429 before exercising the 
 
 ## Remaining work and limits
 
-- 300-student capacity remains unverified.
+- 300-student capacity remains unverified. Run `capacity-1793594118288` is preparing accounts with paced logins; inspect its eventual report and cleanup rather than restarting it.
 - Sheet synchronization currently rebuilds the workbook for every successful submission. Concurrent writers, request quotas and retry behavior need further work before claiming full submission capacity.
-- Local fixes and tests cover pagination beyond 1000 users/attempts, automatic worksheet expansion, and correct display of zero scores. Provider writes still require live verification after deployment.
+- Fixes for pagination beyond 1000 users/attempts, automatic worksheet expansion, and correct display of zero scores are deployed in `dpl_9eMcnpJas7L5pdh1hUQwXTJPT4cF` (READY). Provider writes still require live verification; mocked-provider tests are not live Sheet evidence.
 - 24 legacy Biology questions and 9 Physics questions with missing diagrams/placeholders remain drafts. Restore only from verified original source files; do not fabricate missing diagrams.
 - GitHub upload is blocked by connector permission and unavailable CLI authentication. Production fixes were released through the authenticated Vercel deployment API; local commits preserve the source changes.
 - Database security advisor warns that leaked-password protection is disabled. The student UI uses Google login; no password configuration was changed.

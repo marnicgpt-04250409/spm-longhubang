@@ -95,6 +95,18 @@ try {
   assert.equal(loadedPractice.body.quiz.items.length, 20);
   assert.equal(loadedPractice.body.quiz.practice_items, undefined);
   assert.ok(loadedPractice.body.quiz.items.every((item) => item.question.subject === "Biologi" && item.question.correctOption === undefined));
+  for (const [kind, quizId, items] of [
+    ["practice", practice.body.id, loadedPractice.body.quiz.items],
+    ["daily", (await api("/api/daily?subject=Biologi")).body.quiz.id,
+      (await api("/api/daily?subject=Biologi")).body.quiz.items],
+  ]) {
+    const invalidAnswers = Array.from({length: 20}, () => ({itemId: items[0].id, option: "A"}));
+    const rejected = await api(`/api/${kind}`, {method: "PATCH", body: JSON.stringify({quizId, answers: invalidAnswers})});
+    assert.equal(rejected.response.status, 400, `${kind}: atomic transaction must reject duplicate item IDs`);
+    const ownedAnswers = items.map(item => ({itemId: item.id, option: "A"}));
+    const absent = await api(`/api/${kind}`, {method: "PATCH", body: JSON.stringify({quizId: crypto.randomUUID(), answers: ownedAnswers})});
+    assert.equal(absent.response.status, 404, `${kind}: atomic transaction must reject unknown quiz`);
+  }
   const teacher = await api("/api/teacher/questions");
   assert.equal(teacher.response.status, 403, "Students must not access teacher question management");
   const invalid = await api("/api/daily", { method: "POST", body: JSON.stringify({ subject: "" }) });
